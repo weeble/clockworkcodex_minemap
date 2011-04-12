@@ -310,13 +310,33 @@ class Timer(object):
     def stop(self):
         self.lasttime = time.time()
 
+def darken_by_depth(colour_array, depth_array, low_depth, high_depth, low_brightness, high_brightness):
+    colour_values = colour_array.astype('f4')
+    delta_depth = float(high_depth - low_depth)
+    delta_brightness = float(high_brightness - low_brightness)
+    colour_values *= numpy.expand_dims((((depth_array - low_depth) / delta_depth) + low_brightness) * delta_brightness,2)
+    colour_values = numpy.clip(colour_values, 0.0, 255.0)
+    return colour_values #.astype('i1')
+    
+def darken_by_blocklight(colour_array, depth_array, blocklight, low_brightness, high_brightness):
+    #colour_values = colour_array.astype('f4')
+    light_levels = get_cells_using_heightmap(blocklight, depth_array)
+    return darken_by_depth(colour_array, light_levels, 0.0, 15.0, low_brightness, high_brightness)
+
+def darken_by_combined_light(colour_array, depth_array, blocklight, skylight, low_brightness, high_brightness, daylight):
+    block_light_levels = get_cells_using_heightmap(blocklight, depth_array)
+    sky_light_levels = get_cells_using_heightmap(skylight, depth_array)
+    light_levels = numpy.max([block_light_levels.astype('f4'), sky_light_levels.astype('f4') * daylight], axis=0)
+    return darken_by_depth(colour_array, light_levels, 0.0, 15.0, low_brightness, high_brightness)
+    
+
 def do_shaded_colour_air_picture(fname):
     t=Timer()
     t.start()
     ch=Chunk((512,512))
     ch.load_region(fname)
     t.event("Loading")
-    for low, high in [(0,32),(32,64),(64,96),(96,128)]:
+    for low, high in [(0,34),(31,65),(63,97),(94,128)]:
         chunk_slice = ch.altitude_slice(low, high)
         #deepest_air = chunk_slice.get_deepest_air()
         floor_heights = chunk_slice.get_highest_floor() - 1
@@ -326,12 +346,18 @@ def do_shaded_colour_air_picture(fname):
         t.event("Floor heights")
         colour_values = colour_array[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)]
         t.event("Get cells using heightmap")
+        colour_values = darken_by_depth(colour_values, deepest_air, 0.0, 34.0, 0.2, 1.0)
+        '''
         colour_values = colour_values.astype('f4')
         colour_values *= numpy.expand_dims(deepest_air,2)
         colour_values = numpy.clip((colour_values / 36.0) + 32, 0.0, 255.0)
         colour_values = colour_values.astype('i1')
+        '''
+        colour_values = darken_by_combined_light(colour_values, deepest_air,
+            chunk_slice.blocklight, chunk_slice.skylight, 0.0625, 1.4, 0.5)
         t.event("Colour manipulation")
         alpha_values = numpy.ones((512,512,1), dtype='i1') * 255
+        numpy.putmask(alpha_values, floor_heights == 32, 0)
         rgba_values = numpy.dstack([colour_values, alpha_values])
         save_byte_image(rgba_values, fname+'_shadedcolourhighfloor_%s_%s.png'%(low, high))
         t.event("Finishing and saving")
