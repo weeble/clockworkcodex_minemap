@@ -21,6 +21,118 @@ gold = [255,255,0]
 rosered = [255,0,32]
 
 
+tileid_mappings = [
+    (2,14), #air (using a random empty texture)
+    (1,0), #stone
+    (0,0), #grass
+    (2,0), #dirt
+    (0,1), #cobblestone
+    (4,0), #planks
+    (15,0), #sapling
+    (1,1), #bedrock
+
+    (15,13), #water
+    (15,13), #water
+    (15,15), #lava (using the horrid lava texture)
+    (15,15), #lava (same)
+    (2,1), #sand
+    (3,1), #gravel
+    (0,2), #goldore
+    (1,2), #ironore
+
+    (2,2), #coal
+    (5,1), #log
+    (5,3), #leaves
+    (0,3), #sponge
+    (1,3), #glass
+    (0,10), #lapisore
+    (0,9), #lapis
+    (14,3), #dispenser
+
+    (0,12), #sandstone
+    (11,4), #note
+    (6,8), #bed
+    (0,0),
+    (0,0),
+    (0,0),
+    (0,0),
+    (0,0),
+
+    (0,0),
+    (0,0),
+    (0,0),
+    (0,4), #wool
+    (0,0),
+    (13,0), #dandelion
+    (12,0), #rose
+    (13,1), #brown mushroom
+
+    (12,1), #red mushroom
+    (7,1), #gold
+    (6,1), #iron
+    (6,0), #slabs
+    (6,0), #slab
+    (7,0), #brick
+    (9,0), #tnt
+    (4,0), #bookshelf (planks texture???)
+
+    (4,2), #mossy
+    (5,2), #obsidian
+    (0,5), #torch
+    (15,15), #fire
+    (1,4), #spawner
+    (4,0), #stairs
+    (9,1), #chest
+    (4,6), #redstone wire
+
+    (2,3), #diamond ore
+    (8,2), #diamond block
+    (11,2), #crafting table
+    (6,5), #seeds???
+    (6,5), #farmland
+    (14,3), #furnace
+    (14,3), #burning furnace
+    (0,6), #signpost (using unlit torch texture)
+
+    (1,6), #door
+    (3,5), #ladder
+    (0,8), #rails
+    (0,1), #cobblestone stairs
+    (0,6), #wall sign (unlit torch texture)
+    (0,6), #level (unlit torch)
+    (1,0), #stone pressure plate (stone)
+    (2,6), #iron door
+
+    (4,0), #wooden pressure plate (planks)
+    (3,3), #redstone ore
+    (3,3), #glowing redstone ore
+    (3,7), #redstone torch, off
+    (3,6), #redstone torch, on
+    (0,6), #stone button (unlit torch)
+    (2,4), #snow
+    (3,4), #ice
+
+    (2,4), #snow block
+    (5,4), #cactus
+    (8,4), #clay
+    (9,4), #sugar cane
+    (11,4), #jukebox
+    (3,5), #fence (using ladder)
+    (6,6), #pumpkin
+    (7,6), #netherrack
+
+    (8,6), #soulsand
+    (9,7), #glowstone
+    (12,1), #portal (using purple wool)
+    (6,6), #jock-o-lantern
+    (9,7), #cake
+    (3,8), #repeater, off
+    (3,9), #repeater, on
+    (9,1), #locked chest
+    ]
+tileid_mappings += [(15,15)] * (256 - len(tileid_mappings))
+
+
 tileid_colours = [
     white, #'air',
     grey, #'stone',
@@ -234,6 +346,22 @@ class Chunk(object):
         potential_footspace = self.blocks[:,:,1:]
         good_floors = numpy.logical_and(potential_floors!=0, potential_footspace==0)
         return (max_height-1)-numpy.argmax(good_floors[:,:,::-1], axis=2)
+    def get_floor_heights(self, low_limit, high_limit):
+        low_limit_3d = numpy.atleast_3d(low_limit)
+        high_limit_3d = numpy.atleast_3d(high_limit)
+        max_height = self.blocks.shape[2]
+        shape = self.blocks.shape
+        trimmed_shape = (shape[0], shape[1], shape[2]-1)
+        cell_depth = numpy.indices(trimmed_shape)[2]
+        cell_is_selected = numpy.logical_and(cell_depth>=low_limit_3d, cell_depth<high_limit_3d)
+        potential_floors = numpy.logical_and(self.blocks[:,:,:-1], cell_is_selected)
+        potential_footspace = self.blocks[:,:,1:]
+        good_floors = numpy.logical_and(potential_floors!=0, potential_footspace==0)
+        floor_heights = (max_height-2)-numpy.argmax(good_floors[:,:,::-1], axis=2)
+        #print high_limit[260:266,480:490]
+        #print floor_heights[260:266,480:490]
+        #raise Exception("stop")
+        return numpy.clip(floor_heights, low_limit, high_limit)
     def altitude_slice(self, low, high):
         chunk2 = Chunk(dimensions=self.dimensions)
         chunk2.blocks = self.blocks[:,:,low:high]
@@ -336,17 +464,20 @@ def do_shaded_colour_air_picture(fname):
     ch=Chunk((512,512))
     ch.load_region(fname)
     t.event("Loading")
-    for low, high in [(0,34),(31,65),(63,97),(94,128)]:
+    for low, high in [(0,128)]: #34),(31,65),(63,97),(94,128)]:
         chunk_slice = ch.altitude_slice(low, high)
         #deepest_air = chunk_slice.get_deepest_air()
-        floor_heights = chunk_slice.get_highest_floor() - 1
+        #floor_heights = chunk_slice.get_highest_floor() - 1
+        max_heights = numpy.indices((512,512))[1] // 5
+        print max_heights.shape
+        floor_heights = chunk_slice.get_floor_heights(0,max_heights)
         t.event("Deep air")
         #floor_heights = deepest_air - 1
         deepest_air = floor_heights + 1
         t.event("Floor heights")
         colour_values = colour_array[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)]
         t.event("Get cells using heightmap")
-        colour_values = darken_by_depth(colour_values, deepest_air, 0.0, 34.0, 0.2, 1.0)
+        colour_values = darken_by_depth(colour_values, deepest_air, 0.0, 128.0, 0.2, 1.0)
         '''
         colour_values = colour_values.astype('f4')
         colour_values *= numpy.expand_dims(deepest_air,2)
@@ -357,9 +488,9 @@ def do_shaded_colour_air_picture(fname):
             chunk_slice.blocklight, chunk_slice.skylight, 0.0625, 1.4, 0.5)
         t.event("Colour manipulation")
         alpha_values = numpy.ones((512,512,1), dtype='i1') * 255
-        numpy.putmask(alpha_values, floor_heights == 32, 0)
+        numpy.putmask(alpha_values, floor_heights == max_heights, 0)
         rgba_values = numpy.dstack([colour_values, alpha_values])
-        save_byte_image(rgba_values, fname+'_shadedcolourhighfloor_%s_%s.png'%(low, high))
+        save_byte_image(rgba_values, fname+'_generalised_slice.png')
         t.event("Finishing and saving")
 
 #class Region(object):
