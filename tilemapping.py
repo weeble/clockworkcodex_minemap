@@ -11,7 +11,8 @@ from pygame.locals import *
 import numpy
 import math
 import sys
-import PIL.Image
+import time
+#import PIL.Image
 
 
 #
@@ -40,7 +41,8 @@ def make_numbered_texture_atlas():
     return surface
 
 
-pygame.init()
+#pygame.init()
+pygame.font.init()
 
 tilemap = make_numbered_texture_atlas()
 atlas = pygame.image.load('terrain.png')
@@ -67,19 +69,27 @@ atlas = pygame.image.load('terrain.png')
 
 
 
-def render(resources):
-    glBindFramebuffer(GL_FRAMEBUFFER, resources.framebuffer_object)
-    glViewport(0,0,8192,8192)
+def render(resources, position, zoom):
+    glBindFramebuffer(GL_FRAMEBUFFER, 0) #resources.framebuffer_object)
+    glViewport(0,0,800,600)
     glClearColor(0.1, 0.1, 0.1, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
     glUseProgram(resources.program)
-    glUniform1f(resources.uniforms.timer, resources.timer)
+    #glUniform1f(resources.uniforms.timer, resources.timer)
+    glUniform2f(resources.uniforms['screen_dimensions'], 800.0, 600.0)
+    glUniform2f(resources.uniforms['cam_position'], position[0], position[1])
+    glUniform1f(resources.uniforms['zoom'], zoom)
+    glUniform1f(resources.uniforms['tile_dimension'], 16.0) 
+
+
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, resources.textures[0])
-    glUniform1i(resources.uniforms.textures[0], 0)
+    glUniform1i(resources.uniforms['textures[0]'], 0)
+
     glActiveTexture(GL_TEXTURE1)
     glBindTexture(GL_TEXTURE_2D, resources.textures[1])
-    glUniform1i(resources.uniforms.textures[1], 1)
+    glUniform1i(resources.uniforms['textures[1]'], 1)
+
     glBindBuffer(GL_ARRAY_BUFFER, resources.vertex_buffer)
     glVertexAttribPointer(
         resources.attributes.position,
@@ -97,13 +107,13 @@ def render(resources):
         GL_UNSIGNED_SHORT,
         None)
     glDisableVertexAttribArray(resources.attributes.position)
-    pixels = glReadPixelsub(0,0,8192,8192,GL_RGBA)
-    print pixels.shape
-    PIL.Image.fromarray(pixels.astype('u1')[::-1,:,:]).save("openglrender.png")
+    #pixels = glReadPixelsub(0,0,8192,8192,GL_RGBA)
+    #print pixels.shape
+    #PIL.Image.fromarray(pixels.astype('u1')[::-1,:,:]).save("openglrender.png")
     #PIL.Image.fromarray(pixels[::-1,:]).save("openglrender.png")
     #print pixels
 
-    sys.exit(0)
+    #sys.exit(0)
     pygame.display.flip()
 
 def make_buffer(target, buffer_data, size):
@@ -130,89 +140,52 @@ element_buffer_data = short_array(
 vertex_shader='''\
 #version 110
 
-uniform float timer;
+uniform vec2 screen_dimensions;
+uniform vec2 cam_position;
+uniform float zoom;
+uniform float tile_dimension;
 
 attribute vec4 position;
 
 varying vec2 texcoord;
-varying float fade_factor;
-
-mat4 view_frustum(
-    float angle_of_view,
-    float aspect_ratio,
-    float z_near,
-    float z_far
-) {
-    return mat4(
-        vec4(1.0/tan(angle_of_view),           0.0, 0.0, 0.0),
-        vec4(0.0, aspect_ratio/tan(angle_of_view),  0.0, 0.0),
-        vec4(0.0, 0.0,    (z_far+z_near)/(z_far-z_near), 1.0),
-        vec4(0.0, 0.0, -2.0*z_far*z_near/(z_far-z_near), 0.0)
-    );
-}
-
-mat4 scale(float x, float y, float z)
-{
-    return mat4(
-        vec4(x,   0.0, 0.0, 0.0),
-        vec4(0.0, y,   0.0, 0.0),
-        vec4(0.0, 0.0, z,   0.0),
-        vec4(0.0, 0.0, 0.0, 1.0)
-    );
-}
-
-mat4 translate(float x, float y, float z)
-{
-    return mat4(
-        vec4(1.0, 0.0, 0.0, 0.0),
-        vec4(0.0, 1.0, 0.0, 0.0),
-        vec4(0.0, 0.0, 1.0, 0.0),
-        vec4(x,   y,   z,   1.0)
-    );
-}
-
-mat4 rotate_x(float theta)
-{
-    return mat4(
-        vec4(1.0,         0.0,         0.0, 0.0),
-        vec4(0.0,  cos(timer),  sin(timer), 0.0),
-        vec4(0.0, -sin(timer),  cos(timer), 0.0),
-        vec4(0.0,         0.0,         0.0, 1.0)
-    );
-}
 
 void main()
 {
-    gl_Position = //view_frustum(radians(45.0), 1.0, 0.5, 5.0)
-        //translate(cos(timer/10.0), sin(timer/10.0), 0.0)
-        //* rotate_x(timer)
-        scale(1.0, 1.0, 1.0)
-        * position;
-    texcoord = position.xy * vec2(0.5) + vec2(0.5);
-    fade_factor = sin(timer) * 0.5 + 0.5;
+    gl_Position.xy = ((position.xy / 2.0 + 0.5) * tile_dimension * 512.0 - cam_position) * 2.0 * zoom / screen_dimensions;
+    gl_Position.zw = vec2(0.0, 1.0);
+    texcoord = position.xy; // * vec2(0.5) + vec2(0.5);
 }
 '''
 
 fragment_shader = '''\
 #version 130
 
-varying float fade_factor;
 uniform sampler2D textures[2];
 
 varying vec2 texcoord;
 
 void main()
 {
-    float utheta = mod(texcoord.x, 1.0/512.0);
-    float vtheta = mod(texcoord.y, 1.0/512.0);
-    float xx = 1.0-texcoord.y;
-    float yy = texcoord.x;
+    vec2 theta;
+
+    theta = (mod(texcoord*0.5+0.5, 1.0/512.0) * 512.0)*2.0 - 1.0; // / 16.0)*2.0 - 1.0;
+    //float utheta = mod(texcoord.x, 1.0/512.0);
+    //float vtheta = mod(texcoord.y, 1.0/512.0);
+    float xx = -texcoord.y * 0.5 + 0.5;
+    float yy = texcoord.x * 0.5 + 0.5;
     vec4 tiles_sample = texture2D(textures[0], vec2(xx,yy));
+    float flipx = (tiles_sample.z * 255.0) >= 8.0 ? -1.0 : 1.0;
+    float rotation = mod(tiles_sample.z * 255.0, 8.0) * 0.5 * 3.141592653589793;
+    //float rotation = 0;
+    mat2 transform = mat2(
+        flipx * cos(rotation),   flipx * sin(rotation),
+        -sin(rotation),          cos(rotation));
     float tile_value = round(255.0 * tiles_sample.x);
     float uphi = mod(tile_value, 16.0);
     float vphi = floor(tile_value / 16.0);
-    vec2 atlas_point = vec2(uphi, vphi) / 16.0 + vec2(utheta, vtheta) / (16.0/512.0);
+    vec2 atlas_point = (vec2(uphi, vphi) + 0.5) / 16.0 + (transform * theta * 0.5 / 16.0); // vec2(utheta, vtheta) / (16.0/512.0);
     gl_FragColor = texture2D(textures[1], atlas_point);
+    // Green channel contains a brightness multiplier:
     gl_FragColor.xyz *= tiles_sample.y;
 }
 '''
@@ -226,6 +199,9 @@ class Uniforms(object):
 
 class Attributes(object):
     pass
+
+def get_uniforms(program, *names):
+    return dict((name, glGetUniformLocation(program, name)) for name in names)
 
 def make_resources(tilemap):
     resources = Resources()
@@ -249,13 +225,21 @@ def make_resources(tilemap):
     resources.program=make_program(
         resources.vertex_shader,
         resources.fragment_shader)
-    resources.uniforms=Uniforms()
-    resources.uniforms.timer = glGetUniformLocation(
+    resources.uniforms=get_uniforms(
         resources.program,
-        "timer")
-    resources.uniforms.textures =[
-        glGetUniformLocation(resources.program, "textures[0]"),
-        glGetUniformLocation(resources.program, "textures[1]")]
+        'screen_dimensions',
+        'cam_position',
+        'zoom',
+        'tile_dimension',
+        'textures[0]',
+        'textures[1]')
+    #resources.uniforms=Uniforms()
+    #resources.uniforms.timer = glGetUniformLocation(
+    #    resources.program,
+    #    "timer")
+    #resources.uniforms.textures =[
+    #    glGetUniformLocation(resources.program, "textures[0]"),
+    #    glGetUniformLocation(resources.program, "textures[1]")]
     resources.attributes=Attributes()
     resources.attributes.position = glGetAttribLocation(
         resources.program, "position")
@@ -314,7 +298,6 @@ def make_shader(type, source):
     shader = glCreateShader(type)
     glShaderSource(shader, source)
     glCompileShader(shader)
-    print "Not sure about this one..."
     retval = ctypes.c_uint(GL_UNSIGNED_INT)
     glGetShaderiv(shader, GL_COMPILE_STATUS, retval)
     if not retval:
@@ -345,7 +328,7 @@ def update_timer(resources):
 def main():
     video_flags = OPENGL|DOUBLEBUF
     pygame.init()
-    surface = pygame.display.set_mode((640,480), video_flags)
+    surface = pygame.display.set_mode((800,600), video_flags)
     resources = make_resources()
     frames = 0
     done = 0
@@ -364,18 +347,99 @@ def main():
         frames += 1
     print "fps:  %d" % ((frames*1000)/(pygame.time.get_ticks()-ticks))
 
+
+
+# pygame.surfarray.make_surface is broken in 1.9.1. It reads uninitialized
+# stack contents on 64-bit systems. :( Here we use numpy to do the copying
+# instead.
+def make_surface(array):
+    w,h,depth = array.shape
+    if depth == 4:
+        surf = pygame.Surface((w,h), depth=32, flags=pygame.SRCALPHA)
+        pixels = pygame.surfarray.pixels3d(surf)
+        pixels[:,:,:depth] = array
+    elif depth == 3:
+        surf = pygame.Surface((w,h), depth=32)
+        pixels = pygame.surfarray.pixels3d(surf)
+        pixels[:,:,:depth] = array
+    else:
+        raise ValueError("Array must have minor dimension of 3 or 4.")
+    return surf
+
 def hacky_map_render(tilemap, light_values):
     w,h = tilemap.shape
     pixels = numpy.zeros((w,h,3), dtype='u1')
     pixels[:,:,0] = tilemap
     pixels[:,:,1] = light_values
+    pixels[:,:,2] = numpy.mod(numpy.indices((w,h))[1],16)
+    print pixels[190,300:320,2]
+    print "Pixel shape (expecting (8192, 8192, 3)):", pixels.shape
 
     video_flags = OPENGL|DOUBLEBUF
-    pygame.init()
-    surface = pygame.display.set_mode((640,480), video_flags)
-    resources = make_resources(pygame.surfarray.make_surface(pixels))
+    #pygame.init()
+    pygame.display.init()
+    # Workaround for pygame bug: pygame.time cannot be initialized if you don't
+    # call pygame.init. But if we call that, pygame.mixer will be initialized
+    # and add seconds to our shutdown time for no good reason. So instead we
+    # replace get_ticks.
+    pygame.time.get_ticks = lambda:int(time.time()*1000)
+    #pygame.font.init()
+
+    surface = pygame.display.set_mode((800,600), video_flags)
+    #resources = make_resources(pygame.surfarray.make_surface(pixels))
+    resources = make_resources(make_surface(pixels))
     update_timer(resources)
-    render(resources)
+    #render(resources)
+    frames = 0
+    done = 0
+    zoom = 1.0
+    position = [4096.0, 4096.0]
+    dragging = False
+    draglast = 0,0
+
+    ticks = pygame.time.get_ticks()
+    print ticks
+    while not done:
+        while 1:
+            event = pygame.event.poll()
+            if event.type == NOEVENT:
+                break
+            if event.type == KEYDOWN:
+                pass
+            if event.type == QUIT:
+                done = 1
+            if event.type == MOUSEMOTION:
+                if dragging:
+                    mx,my = event.pos
+                    lx,ly = draglast
+                    dx = (mx - lx)/zoom
+                    dy = (my - ly)/zoom
+                    position[0] -= dx
+                    position[1] += dy
+                    draglast = mx, my
+            if event.type == MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    draglast = event.pos
+                    dragging = True
+                if event.button == 4:
+                    zoom *= 2.0
+                if event.button == 5:
+                    zoom /= 2.0
+                    x,y = position
+                    x = math.floor(x * zoom + 0.5) / zoom
+                    y = math.floor(y * zoom + 0.5) / zoom
+                    position = [x,y]
+            if event.type == MOUSEBUTTONUP:
+                if event.button == 1:
+                    dragging = False
+        update_timer(resources)
+        render(resources, position, zoom)
+        frames += 1
+    elapsed_ticks = pygame.time.get_ticks()-ticks
+    if elapsed_ticks>0:
+        print "fps:  %d" % ((frames*1000.0)/elapsed_ticks)
+    else:
+        print "fps:  ???"
     
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@ from struct import unpack
 from zlib import decompress
 from StringIO import StringIO
 import numpy
-import PIL.Image
+#import PIL.Image
 import time
 from collections import defaultdict
 import tilemapping
@@ -484,7 +484,7 @@ def do_shaded_colour_air_picture(fname):
         #floor_heights = chunk_slice.get_highest_floor() - 1
         max_heights = numpy.indices((512,512))[1] // 5
         max_heights[:,:] = 127
-        print max_heights.shape
+        print "max_heights.shape (expecting (512,512)):", max_heights.shape
         floor_heights = chunk_slice.get_floor_heights(0,max_heights)
         t.event("Deep air")
         #floor_heights = deepest_air - 1
@@ -500,8 +500,10 @@ def do_shaded_colour_air_picture(fname):
         colour_values = colour_values.astype('i1')
         '''
         light_levels = light_levels_combined(deepest_air,
-            chunk_slice.blocklight, chunk_slice.skylight, 0.0625, 1.4, 0.2)
-        light_levels = numpy.clip(light_levels*(floor_heights/100.0), 20.0, 255.0)
+            chunk_slice.blocklight, chunk_slice.skylight, 0.8, 1.4, 0.2)
+        light_levels[:,:] = 255.0
+        depth_lighting = numpy.clip((floor_heights-60.0)/20.0, 0.2, 1.0)
+        light_levels = numpy.clip(light_levels*depth_lighting, 20.0, 255.0)
         t.event("Colour manipulation")
         alpha_values = numpy.ones((512,512,1), dtype='i1') * 255
         numpy.putmask(alpha_values, floor_heights == max_heights, 0)
