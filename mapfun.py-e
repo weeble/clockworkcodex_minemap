@@ -6,6 +6,7 @@ import numpy
 import PIL.Image
 import time
 from collections import defaultdict
+import tilemapping
 
 white = [255,255,255]
 grey = [128,128,128]
@@ -131,6 +132,8 @@ tileid_mappings = [
     (9,1), #locked chest
     ]
 tileid_mappings += [(15,15)] * (256 - len(tileid_mappings))
+
+tileid_mapping_bytes = numpy.array([x+16*(15-y) for (x,y) in tileid_mappings], dtype="u1")
 
 
 tileid_colours = [
@@ -457,6 +460,17 @@ def darken_by_combined_light(colour_array, depth_array, blocklight, skylight, lo
     light_levels = numpy.max([block_light_levels.astype('f4'), sky_light_levels.astype('f4') * daylight], axis=0)
     return darken_by_depth(colour_array, light_levels, 0.0, 15.0, low_brightness, high_brightness)
     
+def light_levels_combined(depth_array, blocklight, skylight, low_brightness, high_brightness, daylight):
+    block_light_levels = get_cells_using_heightmap(blocklight, depth_array)
+    sky_light_levels = get_cells_using_heightmap(skylight, depth_array)
+    light_levels = numpy.max([block_light_levels.astype('f4'), sky_light_levels.astype('f4') * daylight], axis=0)
+    low_depth = 0
+    high_depth = 15
+    delta_depth = float(high_depth - low_depth)
+    delta_brightness = float(high_brightness - low_brightness)
+    new_light_levels = (((light_levels - low_depth) / delta_depth) + low_brightness) * delta_brightness
+    return numpy.clip(new_light_levels*255.0, 0.0, 255.0)
+
 
 def do_shaded_colour_air_picture(fname):
     t=Timer()
@@ -469,6 +483,7 @@ def do_shaded_colour_air_picture(fname):
         #deepest_air = chunk_slice.get_deepest_air()
         #floor_heights = chunk_slice.get_highest_floor() - 1
         max_heights = numpy.indices((512,512))[1] // 5
+        max_heights[:,:] = 127
         print max_heights.shape
         floor_heights = chunk_slice.get_floor_heights(0,max_heights)
         t.event("Deep air")
@@ -484,15 +499,19 @@ def do_shaded_colour_air_picture(fname):
         colour_values = numpy.clip((colour_values / 36.0) + 32, 0.0, 255.0)
         colour_values = colour_values.astype('i1')
         '''
-        colour_values = darken_by_combined_light(colour_values, deepest_air,
-            chunk_slice.blocklight, chunk_slice.skylight, 0.0625, 1.4, 0.5)
+        light_levels = light_levels_combined(deepest_air,
+            chunk_slice.blocklight, chunk_slice.skylight, 0.0625, 1.4, 0.2)
+        light_levels = numpy.clip(light_levels*(floor_heights/100.0), 20.0, 255.0)
         t.event("Colour manipulation")
         alpha_values = numpy.ones((512,512,1), dtype='i1') * 255
         numpy.putmask(alpha_values, floor_heights == max_heights, 0)
         rgba_values = numpy.dstack([colour_values, alpha_values])
-        save_byte_image(rgba_values, fname+'_generalised_slice.png')
+        tilemapping.hacky_map_render(tileid_mapping_bytes[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)], light_levels)
+        #save_byte_image(rgba_values, fname+'_generalised_slice.png')
         t.event("Finishing and saving")
 
+def x():
+    do_shaded_colour_air_picture('world/region/r.0.0.mcr')
 #class Region(object):
 #    def __ini
 

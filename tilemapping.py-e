@@ -205,13 +205,15 @@ void main()
 {
     float utheta = mod(texcoord.x, 1.0/512.0);
     float vtheta = mod(texcoord.y, 1.0/512.0);
-    vec4 tiles_sample = texture2D(textures[0], texcoord.xy);
+    float xx = 1.0-texcoord.y;
+    float yy = texcoord.x;
+    vec4 tiles_sample = texture2D(textures[0], vec2(xx,yy));
     float tile_value = round(255.0 * tiles_sample.x);
     float uphi = mod(tile_value, 16.0);
     float vphi = floor(tile_value / 16.0);
     vec2 atlas_point = vec2(uphi, vphi) / 16.0 + vec2(utheta, vtheta) / (16.0/512.0);
     gl_FragColor = texture2D(textures[1], atlas_point);
-    gl_FragColor.w = 1.0;
+    gl_FragColor.xyz *= tiles_sample.y;
 }
 '''
 
@@ -225,7 +227,7 @@ class Uniforms(object):
 class Attributes(object):
     pass
 
-def make_resources():
+def make_resources(tilemap):
     resources = Resources()
     resources.vertex_buffer = make_buffer(
         GL_ARRAY_BUFFER,
@@ -313,7 +315,7 @@ def make_shader(type, source):
     glShaderSource(shader, source)
     glCompileShader(shader)
     print "Not sure about this one..."
-    retval = ctypes.c_uint()
+    retval = ctypes.c_uint(GL_UNSIGNED_INT)
     glGetShaderiv(shader, GL_COMPILE_STATUS, retval)
     if not retval:
         print >> sys.stderr, "Failed to compile shader."
@@ -361,6 +363,20 @@ def main():
         render(resources)
         frames += 1
     print "fps:  %d" % ((frames*1000)/(pygame.time.get_ticks()-ticks))
+
+def hacky_map_render(tilemap, light_values):
+    w,h = tilemap.shape
+    pixels = numpy.zeros((w,h,3), dtype='u1')
+    pixels[:,:,0] = tilemap
+    pixels[:,:,1] = light_values
+
+    video_flags = OPENGL|DOUBLEBUF
+    pygame.init()
+    surface = pygame.display.set_mode((640,480), video_flags)
+    resources = make_resources(pygame.surfarray.make_surface(pixels))
+    update_timer(resources)
+    render(resources)
+    
 
 if __name__ == '__main__':
     main()
