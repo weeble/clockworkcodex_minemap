@@ -80,7 +80,7 @@ all_tileinfo = [
 
     TileInfo(48, "mossy",         False, (4,2,0)),
     TileInfo(49, "obsidian",      False, (5,2,0)),
-    TileInfo(50, "torch",         True,  (0,0,0),(10,13,2),(10,13,0),(10,13,1),(10,13,3),(11,13,0)),
+    TileInfo(50, "torch",         True,  (0,0,0),(10,13,2),(10,13,0),(10,13,3),(10,13,1),(11,13,0)),
     TileInfo(51, "fire",          True,  (15,15,0)),
     TileInfo(52, "spawner",       False, (1,4,0)),
     TileInfo(53, "stairs",        False, (4,0,0)),
@@ -115,7 +115,7 @@ all_tileinfo = [
     TileInfo(79, "ice",                   False, (3,4,0)),
 
     TileInfo(80, "snow block",  False, (2,4,0)),
-    TileInfo(81, "cactus",      False, (5,4,0)),
+    TileInfo(81, "cactus",      True,  (5,4,0)),
     TileInfo(82, "clay",        False, (8,4,0)),
     TileInfo(83, "sugar cane",  False, (9,4,0)),
     TileInfo(84, "jukebox",     False, (11,4,0)),
@@ -400,6 +400,7 @@ def do_shaded_colour_air_picture(fname):
         max_heights[:,:] = 127
         print "max_heights.shape (expecting (512,512)):", max_heights.shape
         floor_heights = chunk_slice.get_floor_heights(0,max_heights,False)
+        decoration_heights = chunk_slice.get_floor_heights(floor_heights+1,max_heights,True)
         t.event("Deep air")
         #floor_heights = deepest_air - 1
         deepest_air = floor_heights + 1
@@ -426,7 +427,11 @@ def do_shaded_colour_air_picture(fname):
         data = get_cells_using_heightmap(chunk_slice.data, floor_heights)
         block_array = tileid_advanced_mapping_array[blocks, data, 0]
         orientation_array = tileid_advanced_mapping_array[blocks, data, 1]
-        tilemapping.hacky_map_render(block_array, light_levels, orientation_array)  #tileid_mapping_bytes[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)], light_levels)
+        transparent_blocks = get_cells_using_heightmap(chunk_slice.blocks, decoration_heights)
+        transparent_data = get_cells_using_heightmap(chunk_slice.data, decoration_heights)
+        transparent_block_array = tileid_advanced_mapping_array[transparent_blocks, transparent_data, 0]
+        transparent_orientations = tileid_advanced_mapping_array[transparent_blocks, transparent_data, 1]
+        tilemapping.hacky_map_render(block_array, light_levels, orientation_array, transparent_block_array, transparent_orientations)  #tileid_mapping_bytes[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)], light_levels)
         #save_byte_image(rgba_values, fname+'_generalised_slice.png')
         t.event("Finishing and saving")
 

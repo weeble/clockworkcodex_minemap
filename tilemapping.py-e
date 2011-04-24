@@ -75,49 +75,51 @@ def render(resources, position, zoom):
     glClearColor(0.4, 0.4, 0.4, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
 
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    for texture in (resources.textures[0], resources.textures[2],):
 
-    glUseProgram(resources.program)
-    #glUniform1f(resources.uniforms.timer, resources.timer)
-    glUniform2f(resources.uniforms['screen_dimensions'], 800.0, 600.0)
-    glUniform2f(resources.uniforms['cam_position'], position[0], position[1])
-    glUniform1f(resources.uniforms['zoom'], zoom)
-    glUniform1f(resources.uniforms['tile_dimension'], 16.0) 
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        glUseProgram(resources.program)
+        #glUniform1f(resources.uniforms.timer, resources.timer)
+        glUniform2f(resources.uniforms['screen_dimensions'], 800.0, 600.0)
+        glUniform2f(resources.uniforms['cam_position'], position[0], position[1])
+        glUniform1f(resources.uniforms['zoom'], zoom)
+        glUniform1f(resources.uniforms['tile_dimension'], 16.0) 
 
 
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, resources.textures[0])
-    glUniform1i(resources.uniforms['textures[0]'], 0)
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, texture) #resources.textures[0])
+        glUniform1i(resources.uniforms['textures[0]'], 0)
 
-    glActiveTexture(GL_TEXTURE1)
-    glBindTexture(GL_TEXTURE_2D, resources.textures[1])
-    glUniform1i(resources.uniforms['textures[1]'], 1)
+        glActiveTexture(GL_TEXTURE1)
+        glBindTexture(GL_TEXTURE_2D, resources.textures[1])
+        glUniform1i(resources.uniforms['textures[1]'], 1)
 
-    glBindBuffer(GL_ARRAY_BUFFER, resources.vertex_buffer)
-    glVertexAttribPointer(
-        resources.attributes.position,
-        4, # size
-        GL_FLOAT, # type
-        GL_FALSE, # normalized?
-        ctypes.sizeof(GLfloat)*4, # stride
-        None # offset
-        )
-    glEnableVertexAttribArray(resources.attributes.position)
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, resources.element_buffer)
-    glDrawElements(
-        GL_TRIANGLE_STRIP,
-        4,
-        GL_UNSIGNED_SHORT,
-        None)
-    glDisableVertexAttribArray(resources.attributes.position)
-    #pixels = glReadPixelsub(0,0,8192,8192,GL_RGBA)
-    #print pixels.shape
-    #PIL.Image.fromarray(pixels.astype('u1')[::-1,:,:]).save("openglrender.png")
-    #PIL.Image.fromarray(pixels[::-1,:]).save("openglrender.png")
-    #print pixels
+        glBindBuffer(GL_ARRAY_BUFFER, resources.vertex_buffer)
+        glVertexAttribPointer(
+            resources.attributes.position,
+            4, # size
+            GL_FLOAT, # type
+            GL_FALSE, # normalized?
+            ctypes.sizeof(GLfloat)*4, # stride
+            None # offset
+            )
+        glEnableVertexAttribArray(resources.attributes.position)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, resources.element_buffer)
+        glDrawElements(
+            GL_TRIANGLE_STRIP,
+            4,
+            GL_UNSIGNED_SHORT,
+            None)
+        glDisableVertexAttribArray(resources.attributes.position)
+        #pixels = glReadPixelsub(0,0,8192,8192,GL_RGBA)
+        #print pixels.shape
+        #PIL.Image.fromarray(pixels.astype('u1')[::-1,:,:]).save("openglrender.png")
+        #PIL.Image.fromarray(pixels[::-1,:]).save("openglrender.png")
+        #print pixels
 
-    #sys.exit(0)
+        #sys.exit(0)
     pygame.display.flip()
 
 def make_buffer(target, buffer_data, size):
@@ -207,7 +209,7 @@ class Attributes(object):
 def get_uniforms(program, *names):
     return dict((name, glGetUniformLocation(program, name)) for name in names)
 
-def make_resources(tilemap):
+def make_resources(tilemap, tilemap2):
     resources = Resources()
     resources.vertex_buffer = make_buffer(
         GL_ARRAY_BUFFER,
@@ -219,7 +221,8 @@ def make_resources(tilemap):
         element_buffer_data.nbytes)
     resources.textures=[
         make_texture(image=tilemap, interpolate=False),
-        make_alpha_texture(image=atlas, interpolate=False)]
+        make_alpha_texture(image=atlas, interpolate=False),
+        make_texture(image=tilemap2, interpolate=False)]
     resources.vertex_shader=make_shader(
         GL_VERTEX_SHADER,
         vertex_shader)
@@ -388,12 +391,18 @@ def make_surface(array):
         raise ValueError("Array must have minor dimension of 3 or 4.")
     return surf
 
-def hacky_map_render(tilemap, light_values, orientation_array):
+def hacky_map_render(tilemap, light_values, orientation_array, tilemap2, orientation2):
     w,h = tilemap.shape
     pixels = numpy.zeros((w,h,3), dtype='u1')
     pixels[:,:,0] = tilemap
     pixels[:,:,1] = light_values
     pixels[:,:,2] = orientation_array #numpy.mod(numpy.indices((w,h))[1],16)
+
+    pixels2 = numpy.zeros((w,h,3), dtype='u1')
+    pixels2[:,:,0] = tilemap2
+    pixels2[:,:,1] = light_values
+    pixels2[:,:,2] = orientation2
+    #numpy.dstack([tilemap2, light_values, orientation2])
     print pixels[190,300:320,2]
     print "Pixel shape (expecting (8192, 8192, 3)):", pixels.shape
 
@@ -409,7 +418,7 @@ def hacky_map_render(tilemap, light_values, orientation_array):
 
     surface = pygame.display.set_mode((800,600), video_flags)
     #resources = make_resources(pygame.surfarray.make_surface(pixels))
-    resources = make_resources(make_surface(pixels))
+    resources = make_resources(make_surface(pixels), make_surface(pixels2))
     update_timer(resources)
     #render(resources)
     frames = 0
