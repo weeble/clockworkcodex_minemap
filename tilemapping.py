@@ -72,8 +72,12 @@ atlas = pygame.image.load('terrain.png')
 def render(resources, position, zoom):
     glBindFramebuffer(GL_FRAMEBUFFER, 0) #resources.framebuffer_object)
     glViewport(0,0,800,600)
-    glClearColor(0.1, 0.1, 0.1, 1.0)
+    glClearColor(0.4, 0.4, 0.4, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
+
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
     glUseProgram(resources.program)
     #glUniform1f(resources.uniforms.timer, resources.timer)
     glUniform2f(resources.uniforms['screen_dimensions'], 800.0, 600.0)
@@ -215,7 +219,7 @@ def make_resources(tilemap):
         element_buffer_data.nbytes)
     resources.textures=[
         make_texture(image=tilemap, interpolate=False),
-        make_texture(image=atlas, interpolate=False)]
+        make_alpha_texture(image=atlas, interpolate=False)]
     resources.vertex_shader=make_shader(
         GL_VERTEX_SHADER,
         vertex_shader)
@@ -251,6 +255,24 @@ def make_resources(tilemap):
 class State(object):
     timer = 0
     camera_pos = float_array(0,0,-3)
+
+def make_alpha_texture(filename=None, image=None, interpolate=True):
+    if image == None:
+        image = pygame.image.load(filename)
+    pixels = pygame.image.tostring(image, "RGBA", True)
+    texture=glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, texture)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE)
+    glTexImage2D(
+        GL_TEXTURE_2D, 0,
+        GL_RGBA8,
+        image.get_width(), image.get_height(), 0,
+        GL_RGBA, GL_UNSIGNED_BYTE,
+        pixels)
+    return texture
 
 def make_texture(filename=None, image=None, interpolate=True):
     if image == None:
@@ -366,12 +388,12 @@ def make_surface(array):
         raise ValueError("Array must have minor dimension of 3 or 4.")
     return surf
 
-def hacky_map_render(tilemap, light_values):
+def hacky_map_render(tilemap, light_values, orientation_array):
     w,h = tilemap.shape
     pixels = numpy.zeros((w,h,3), dtype='u1')
     pixels[:,:,0] = tilemap
     pixels[:,:,1] = light_values
-    pixels[:,:,2] = numpy.mod(numpy.indices((w,h))[1],16)
+    pixels[:,:,2] = orientation_array #numpy.mod(numpy.indices((w,h))[1],16)
     print pixels[190,300:320,2]
     print "Pixel shape (expecting (8192, 8192, 3)):", pixels.shape
 

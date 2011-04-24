@@ -22,6 +22,10 @@ gold = [255,255,0]
 rosered = [255,0,32]
 
 
+# First of all, we map from tile ids to positions in the terrain texture
+# atlas. This is fine for everything that doesn't depend on data values or
+# need rotation.
+
 tileid_mappings = [
     (2,14), #air (using a random empty texture)
     (1,0), #stone
@@ -134,6 +138,144 @@ tileid_mappings = [
 tileid_mappings += [(15,15)] * (256 - len(tileid_mappings))
 
 tileid_mapping_bytes = numpy.array([x+16*(15-y) for (x,y) in tileid_mappings], dtype="u1")
+
+ROT0 = 0
+ROT90 = 1
+ROT180 = 2
+ROT270 = 3
+ROT0F = 8
+ROT90F = 9
+ROT180F = 10
+ROT270F = 11
+
+
+# Next, we provide overrides for special stuff:
+#    minecart tracks
+
+specific_tilemaps = [
+    # minecart track
+    # 0: EW, 1: NS, 2: S, 3: N, 4: E, 5: W,   6: SW, 7: NW, 8: NE, 9: SE
+    (66, ((0,8,1),(0,8,0),(0,8,0),(0,8,0),(0,8,1),(0,8,1),(0,7,1),(0,7,2),(0,7,3),(0,7,0))),
+    # wool
+    (35, ((0,4,0),(2,13,0),(2,12,0),(2,11,0),(2,10,0),(2,9,0),(2,8,0),(2,7,0),(1,14,0),(1,13,0),(1,12,0),(1,11,0),(1,10,0),(1,9,0),(1,8,0),(1,7,0))),
+    ]
+
+
+class TileInfo(object):
+    def __init__(self, blockid, name, *texture_frames):
+        self.name = name
+        self.blockid = blockid
+        # Pad texture_frames out to 16 entries:
+        self.texture_frames = texture_frames + tuple(texture_frames[0] for i in xrange(16-len(texture_frames)))
+
+all_tileinfo = [
+    TileInfo(0, "air", (2,14,0)),
+    TileInfo(1, "stone", (1,0,0)),
+    TileInfo(2, "grass", (0,0,0)),
+    TileInfo(3, "dirt", (2,0,0)),
+    TileInfo(4, "cobblestone", (0,1,0)),
+    TileInfo(5, "planks", (4,0,0)),
+    TileInfo(6, "sapling", (15,0,0)),
+    TileInfo(7, "bedrock", (1,1,0)),
+
+    TileInfo(8, "water", (15,13,0)),
+    TileInfo(9, "water", (15,13,0)),
+    TileInfo(10, "lava (using the horrid lava texture)", (15,15,0)),
+    TileInfo(11, "lava (same)", (15,15,0)),
+    TileInfo(12, "sand", (2,1,0)),
+    TileInfo(13, "gravel", (3,1,0)),
+    TileInfo(14, "goldore", (0,2,0)),
+    TileInfo(15, "ironore", (1,2,0)),
+
+    TileInfo(16, "coal", (2,2,0)),
+    TileInfo(17, "log", (5,1,0)),
+    TileInfo(18, "leaves", (5,3,0)),
+    TileInfo(19, "sponge", (0,3,0)),
+    TileInfo(20, "glass", (1,3,0)),
+    TileInfo(21, "lapisore", (0,10,0)),
+    TileInfo(22, "lapis", (0,9,0)),
+    TileInfo(23, "dispenser", (14,3,0)),
+
+    TileInfo(24, "sandstone", (0,12,0)),
+    TileInfo(25, "note", (11,4,0)),
+    TileInfo(26, "bed", (6,8,0)),
+    TileInfo(27, "powered rail", (3,10,1),(3,10,0),(3,10,0),(3,10,0),(3,10,1),(3,10,1),(0,0,0),(0,0,0),(3,11,1),(3,11,0),(3,11,0),(3,11,0),(3,11,1),(3,11,1),(0,0,0),(0,0,0)),
+    TileInfo(28, "detector rail", (3,12,1),(3,12,0),(3,12,0),(3,12,0),(3,12,1),(3,12,1)),
+    TileInfo(30, "web", (11,0,0)),
+
+    TileInfo(35, "wool", (0,4,0),(2,13,0),(2,12,0),(2,11,0),(2,10,0),(2,9,0),(2,8,0),(2,7,0),(1,14,0),(1,13,0),(1,12,0),(1,11,0),(1,10,0),(1,9,0),(1,8,0),(1,7,0)),
+    TileInfo(37, "dandelion", (13,0,0)),
+    TileInfo(38, "rose", (12,0,0)),
+    TileInfo(39, "brown mushroom", (13,1,0)),
+
+    TileInfo(40, "red mushroom", (12,1,0)),
+    TileInfo(41, "gold", (7,1,0)),
+    TileInfo(42, "iron", (6,1,0)),
+    TileInfo(43, "slabs", (6,0,0)),
+    TileInfo(44, "slab", (6,0,0)),
+    TileInfo(45, "brick", (7,0,0)),
+    TileInfo(46, "tnt", (9,0,0)),
+    TileInfo(47, "bookshelf (planks texture???)", (4,0,0)),
+
+    TileInfo(48, "mossy", (4,2,0)),
+    TileInfo(49, "obsidian", (5,2,0)),
+    TileInfo(50, "torch", (0,0,0),(10,13,2),(10,13,0),(10,13,1),(10,13,3),(11,13,0)),
+    TileInfo(51, "fire", (15,15,0)),
+    TileInfo(52, "spawner", (1,4,0)),
+    TileInfo(53, "stairs", (4,0,0)),
+    TileInfo(54, "chest", (9,1,0)),
+    TileInfo(55, "redstone wire", (4,6,0)),
+
+    TileInfo(56, "diamond ore", (2,3,0)),
+    TileInfo(57, "diamond block", (8,2,0)),
+    TileInfo(58, "crafting table", (11,2,0)),
+    TileInfo(59, "seeds???", (6,5,0)),
+    TileInfo(60, "farmland", (6,5,0)),
+    TileInfo(61, "furnace", (14,3,0)),
+    TileInfo(62, "burning furnace", (14,3,0)),
+    TileInfo(63, "signpost (using unlit torch texture)", (0,6,0)),
+
+    TileInfo(64, "door", (1,6,0)),
+    TileInfo(65, "ladder", (0,0,0),(0,0,0),(10,14,1), (10,14,3), (10,14,2), (10,14,0)),
+    TileInfo(66, "rails", (0,8,1),(0,8,0),(0,8,0),(0,8,0),(0,8,1),(0,8,1),(0,7,1),(0,7,2),(0,7,3),(0,7,0)),
+    TileInfo(67, "cobblestone stairs", (0,1,0)),
+    TileInfo(68, "wall sign (unlit torch texture)", (0,6,0)),
+    TileInfo(69, "level (unlit torch)", (0,6,0)),
+    TileInfo(70, "stone pressure plate (stone)", (1,0,0)),
+    TileInfo(71, "iron door", (2,6,0)),
+
+    TileInfo(72, "wooden pressure plate (planks)", (4,0,0)),
+    TileInfo(73, "redstone ore", (3,3,0)),
+    TileInfo(74, "glowing redstone ore", (3,3,0)),
+    TileInfo(75, "redstone torch, off", (3,7,0)),
+    TileInfo(76, "redstone torch, on", (3,6,0)),
+    TileInfo(77, "stone button (unlit torch)", (0,6,0)),
+    TileInfo(78, "snow", (2,4,0)),
+    TileInfo(79, "ice", (3,4,0)),
+
+    TileInfo(80, "snow block", (2,4,0)),
+    TileInfo(81, "cactus", (5,4,0)),
+    TileInfo(82, "clay", (8,4,0)),
+    TileInfo(83, "sugar cane", (9,4,0)),
+    TileInfo(84, "jukebox", (11,4,0)),
+    TileInfo(85, "fence (using ladder)", (3,5,0)),
+    TileInfo(86, "pumpkin", (6,6,0)),
+    TileInfo(87, "netherrack", (7,6,0)),
+
+    TileInfo(88, "soulsand", (8,6,0)),
+    TileInfo(89, "glowstone", (9,7,0)),
+    TileInfo(90, "portal (using purple wool)", (12,1,0)),
+    TileInfo(91, "jock-o-lantern", (6,6,0)),
+    TileInfo(92, "cake", (9,7,0)),
+    TileInfo(93, "repeater, off", (3,8,0)),
+    TileInfo(94, "repeater, on", (3,9,0)),
+    TileInfo(95, "locked chest", (9,1,0)),
+    ]
+
+tileid_advanced_mapping_array = numpy.zeros((256,16,2), dtype="u1")
+
+for tileinfo in all_tileinfo:
+    tileid_advanced_mapping_array[tileinfo.blockid] = [(x + 16 * (15 - y), r) for (x,y,r) in tileinfo.texture_frames]
 
 
 tileid_colours = [
@@ -300,6 +442,15 @@ def empty_array(dimensions, dtype='u1'):
 def empty_region_array(dtype='u1'):
     return numpy.zeros((512,512,128), dtype=dtype)
 
+
+class HeightMappedSlice(object):
+    def __init__(self, chunk, heightmap):
+        self.blocks = get_cells_using_heightmap(chunk.blocks, heightmap)
+        self.data = get_cells_using_heightmap(chunk.data, heightmap)
+        air_heightmap = heightmap + 1
+        self.skylight = get_cells_using_heightmap(chunk.skylight, air_heightmap)
+        self.blocklight = get_cells_using_heightmap(chunk.blocklight, air_heightmap)
+
 class Chunk(object):
     def __init__(self, dimensions=(16,16)):
         self.timer = MultiTimer()
@@ -307,11 +458,13 @@ class Chunk(object):
         self.blocks = empty_array(self.dimensions)
         self.skylight = empty_array(self.dimensions)
         self.blocklight = empty_array(self.dimensions)
+        self.data = empty_array(self.dimensions)
     def load_chunk(self, nbtfile):        
         if nbtfile is None:
             self.blocks[:,:,:]=0
             self.skylight[:,:,:]=0
             self.blocklight[:,:,:]=0
+            self.data[:,:,:]=0
             return
         self.dimensions=(16,16)
         level = nbtfile['Level']
@@ -321,6 +474,8 @@ class Chunk(object):
         self.skylight = arrange_4bit(level['SkyLight'].value)
         self.timer.start("blocklight")
         self.blocklight = arrange_4bit(level['BlockLight'].value)
+        self.timer.start("data")
+        self.data = arrange_4bit(level['Data'].value)
         self.timer.stop()
     def load_region(self, fname):
         f = open(fname, "rb")
@@ -336,6 +491,7 @@ class Chunk(object):
                 self.blocks[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.blocks
                 self.skylight[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.skylight
                 self.blocklight[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.blocklight
+                self.data[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.data
                 self.timer.stop()
         self.timer.report()
     def get_deepest_air(self):
@@ -370,6 +526,7 @@ class Chunk(object):
         chunk2.blocks = self.blocks[:,:,low:high]
         chunk2.skylight = self.skylight[:,:,low:high]
         chunk2.blocklight = self.blocklight[:,:,low:high]
+        chunk2.data = self.data[:,:,low:high]
         return chunk2
 
 def get_cells_using_heightmap(source, heightmap):
@@ -471,6 +628,10 @@ def light_levels_combined(depth_array, blocklight, skylight, low_brightness, hig
     new_light_levels = (((light_levels - low_depth) / delta_depth) + low_brightness) * delta_brightness
     return numpy.clip(new_light_levels*255.0, 0.0, 255.0)
 
+def array_rescale(array, old_low_value, old_high_value, new_low_value, new_high_value):
+    old_delta = old_high_value - old_low_value
+    new_delta = new_high_value - new_low_value
+    return (array - old_low_value) / old_delta * new_delta + new_low_value
 
 def do_shaded_colour_air_picture(fname):
     t=Timer()
@@ -508,7 +669,11 @@ def do_shaded_colour_air_picture(fname):
         alpha_values = numpy.ones((512,512,1), dtype='i1') * 255
         numpy.putmask(alpha_values, floor_heights == max_heights, 0)
         rgba_values = numpy.dstack([colour_values, alpha_values])
-        tilemapping.hacky_map_render(tileid_mapping_bytes[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)], light_levels)
+        blocks = get_cells_using_heightmap(chunk_slice.blocks, floor_heights)
+        data = get_cells_using_heightmap(chunk_slice.data, floor_heights)
+        block_array = tileid_advanced_mapping_array[blocks, data, 0]
+        orientation_array = tileid_advanced_mapping_array[blocks, data, 1]
+        tilemapping.hacky_map_render(block_array, light_levels, orientation_array)  #tileid_mapping_bytes[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)], light_levels)
         #save_byte_image(rgba_values, fname+'_generalised_slice.png')
         t.event("Finishing and saving")
 
