@@ -94,13 +94,13 @@ all_tileinfo = [
     TileInfo(60, "farmland",        False, (6,5,0)),
     TileInfo(61, "furnace",         False, (14,3,0)),
     TileInfo(62, "burning furnace", False, (14,3,0)),
-    TileInfo(63, "signpost",        True,  (0,6,0)),
+    TileInfo(63, "signpost",        True,  (12,14,1),(11,15,1),(12,15,1),(0,6,0)),
 
     TileInfo(64, "door",                 True,  (1,6,0)),
-    TileInfo(65, "ladder",               True,  (0,0,0),(0,0,0),(10,14,1), (10,14,3), (10,14,2), (10,14,0)),
+    TileInfo(65, "ladder",               True,  (0,0,0),(0,0,0),(10,14,1), (10,14,3), (10,14,0), (10,14,2)),
     TileInfo(66, "rails",                True,  (0,8,1),(0,8,0),(0,8,0),(0,8,0),(0,8,1),(0,8,1),(0,7,1),(0,7,2),(0,7,3),(0,7,0)),
     TileInfo(67, "cobblestone stairs",   False, (0,1,0)),
-    TileInfo(68, "wall sign",            True,  (0,6,0)),
+    TileInfo(68, "wall sign",            True,  (0,0,0),(0,0,0),(11,14,1),(11,14,3),(11,14,0),(11,14,2)),
     TileInfo(69, "lever",                True,  (0,6,0)),
     TileInfo(70, "stone pressure plate", True,  (1,0,0)),
     TileInfo(71, "iron door",            True,  (2,6,0)),
@@ -255,16 +255,12 @@ class VolumeFactory(object):
                 self.timer.stop()
         self.timer.report()
         return region
-        
 
 class CellArray(object):
     def __init__(self, data):
         self._data=data
     @property
     def dimensions(self):
-        #print high_limit[260:266,480:490]
-        #print floor_heights[260:266,480:490]
-        #raise Exception("stop")
         return self._data.shape
     @property
     def blocks(self):
@@ -280,7 +276,7 @@ class CellArray(object):
         return self._data['blocklight']
     def __getitem__(self, index):
         data = self._data[index]
-        return Volume(data)
+        return type(self)(data)
     def __setitem__(self, index, value):
         self._data[index] = value._data
 
@@ -291,6 +287,45 @@ class Layer(CellArray):
         return tileid_advanced_mapping_array[numpy.choose(mask, [numpy.zeros(self.dimensions, dtype='u1'), self.blocks]), self.data, 0]
     def get_orientations(self):
         return tileid_advanced_mapping_array[self.blocks, self.data, 1]
+    def render(self, renderdatafactory=None):
+        if renderdatafactory is None:
+            renderdatafactory = LayerRenderDataFactory()
+        renderdata
+
+class LayerRenderData(object):
+    def __init__(self, data):
+        self._data=data
+    @property
+    def dimensions(self):
+        return self._data.shape
+    @property
+    def texture_code(self):
+        return self._data['texture_code']
+    @property
+    def brightness(self):
+        return self._data['brightness']
+    @property
+    def orientation(self):
+        return self._data['orientation']
+    @property
+    def alpha(self):
+        return self._data['alpha']
+    def __getitem__(self, index):
+        data = self._data[index]
+        return LayerRenderData(data)
+    def __setitem__(self, index, value):
+        self._data[index] = value._data
+    
+class LayerRenderDataFactory(object):
+    def empty_render_data(self, dimensions):
+        data = numpy.zeros(
+            dimensions,
+            dtype = [
+                ('texture_code', 'u1'),
+                ('brightness', 'u1'),
+                ('orientation', 'u1'),
+                ('alpha', 'u1')])
+        return LayerRenderData(data)
 
 class Volume(CellArray):
     @property
@@ -305,6 +340,19 @@ class Volume(CellArray):
         result['skylight'] = numpy.choose(is_transparent, [above_layer['skylight'], this_layer['skylight']])
         result['blocklight'] = numpy.choose(is_transparent, [above_layer['blocklight'], this_layer['blocklight']])
         return Layer(result)
+    def get_transparent_item_heights_and_mask(self, low_limit, high_limit):
+        low_limit_3d = numpy.atleast_3d(low_limit)
+        high_limit_3d = numpy.atleast_3d(high_limit)
+        max_height = self.blocks.shape[2]
+        shape = self.blocks.shape
+        trimmed_shape = (shape[0], shape[1], shape[2]-1)
+        cell_depth = numpy.indices(trimmed_shape)[2]
+        cell_is_selected = numpy.logical_and(cell_depth>=low_limit_3d, cell_depth<high_limit_3d)
+        selectable_substance = numpy.logical_and(tileid_is_transparent[self.blocks[:,:,:-1]], self.blocks[:,:,:-1] != 0)
+        potential_blocks = numpy.logical_and(selectable_substance, cell_is_selected)
+        floor_heights = (max_height-2)-numpy.argmax(potential_blocks[:,:,::-1], axis=2)
+        mask = get_cells_using_heightmap(potential_blocks, floor_heights)
+        return numpy.clip(floor_heights, low_limit, high_limit), mask
     def get_floor_heights_and_mask(self, low_limit, high_limit, include_transparent=True):
         low_limit_3d = numpy.atleast_3d(low_limit)
         high_limit_3d = numpy.atleast_3d(high_limit)
@@ -322,85 +370,6 @@ class Volume(CellArray):
         return numpy.clip(floor_heights, low_limit, high_limit), mask
         
 
-class Chunk(object):
-    def __init__(self, dimensions=(16,16)):
-        self.timer = MultiTimer()
-        self.dimensions = dimensions
-        self.blocks = empty_array(self.dimensions)
-        self.skylight = empty_array(self.dimensions)
-        self.blocklight = empty_array(self.dimensions)
-        self.data = empty_array(self.dimensions)
-    def load_chunk(self, nbtfile):        
-        if nbtfile is None:
-            self.blocks[:,:,:]=0
-            self.skylight[:,:,:]=0
-            self.blocklight[:,:,:]=0
-            self.data[:,:,:]=0
-            return
-        self.dimensions=(16,16)
-        level = nbtfile['Level']
-        self.timer.start("blocks")
-        self.blocks = arrange_8bit(level['Blocks'].value)
-        self.timer.start("skylight")
-        self.skylight = arrange_4bit(level['SkyLight'].value)
-        self.timer.start("blocklight")
-        self.blocklight = arrange_4bit(level['BlockLight'].value)
-        self.timer.start("data")
-        self.data = arrange_4bit(level['Data'].value)
-        self.timer.stop()
-    def load_region(self, fname):
-        f = open(fname, "rb")
-        chunk = Chunk()
-        chunk.timer = self.timer
-        for z in xrange(32):
-            for x in xrange(32):
-                self.timer.start("get_chunk")
-                chunkdata = get_chunk(f, x, z, self.timer)
-                self.timer.stop()
-                chunk.load_chunk(chunkdata)
-                self.timer.start("copying")
-                self.blocks[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.blocks
-                self.skylight[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.skylight
-                self.blocklight[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.blocklight
-                self.data[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk.data
-                self.timer.stop()
-        self.timer.report()
-    def get_deepest_air(self):
-        #def deepest_air_in_col(col):
-        #    return numpy.nonzero(col==0)[0][0]
-        #return numpy.apply_along_axis(deepest_air_in_col, 2, self.blocks).astype('i4')
-        return numpy.argmax(self.blocks == 0, axis=2)
-    def get_highest_floor(self):
-        max_height = self.blocks.shape[2]
-        potential_floors = self.blocks[:,:,:-1]
-        potential_footspace = self.blocks[:,:,1:]
-        good_floors = numpy.logical_and(potential_floors!=0, potential_footspace==0)
-        return (max_height-1)-numpy.argmax(good_floors[:,:,::-1], axis=2)
-    def get_floor_heights(self, low_limit, high_limit, include_transparent=True):
-        low_limit_3d = numpy.atleast_3d(low_limit)
-        high_limit_3d = numpy.atleast_3d(high_limit)
-        max_height = self.blocks.shape[2]
-        shape = self.blocks.shape
-        trimmed_shape = (shape[0], shape[1], shape[2]-1)
-        cell_depth = numpy.indices(trimmed_shape)[2]
-        cell_is_selected = numpy.logical_and(cell_depth>=low_limit_3d, cell_depth<high_limit_3d)
-        selectable_substance = self.blocks[:,:,:-1] if include_transparent else numpy.logical_not(tileid_is_transparent[self.blocks[:,:,:-1]])
-        potential_floors = numpy.logical_and(selectable_substance, cell_is_selected)
-        potential_footspace = self.blocks[:,:,1:] if include_transparent else numpy.logical_not(tileid_is_transparent[self.blocks[:,:,1:]])
-        good_floors = numpy.logical_and(potential_floors!=0, potential_footspace==0)
-        floor_heights = (max_height-2)-numpy.argmax(good_floors[:,:,::-1], axis=2)
-        #print high_limit[260:266,480:490]
-        #print floor_heights[260:266,480:490]
-        #raise Exception("stop")
-        return numpy.clip(floor_heights, low_limit, high_limit)
-    def altitude_slice(self, low, high):
-        chunk2 = Chunk(dimensions=self.dimensions)
-        chunk2.blocks = self.blocks[:,:,low:high]
-        chunk2.skylight = self.skylight[:,:,low:high]
-        chunk2.blocklight = self.blocklight[:,:,low:high]
-        chunk2.data = self.data[:,:,low:high]
-        return chunk2
-
 def get_cells_using_heightmap(source, heightmap):
     idx = [numpy.arange(dimension) for dimension in source.shape]
     idx = list(numpy.ix_(*idx))
@@ -410,7 +379,6 @@ def get_cells_using_heightmap(source, heightmap):
 
 def save_byte_image(data, filename):
     PIL.Image.fromarray(data.astype('u1')[:,::-1]).save(filename)
-
 
 def do_air_picture(fname):
     ch=Chunk((512,512))
@@ -505,68 +473,59 @@ def array_rescale(array, old_low_value, old_high_value, new_low_value, new_high_
     new_delta = new_high_value - new_low_value
     return (array - old_low_value) / old_delta * new_delta + new_low_value
 
+
+class VolumeAnalyser(object):
+    low_limit = 0
+    high_limit = 127
+    ambient_light = 0.1
+    depth_light = 0.6
+    true_light = 0.3
+    daylight = 0.0
+    layerfactory = LayerRenderDataFactory()
+
+    def apply_lighting(self, layer, heightmap):
+        depth_light = (heightmap - 1.0 * self.low_limit) / (1.0 * (self.high_limit - self.low_limit))
+        true_light = numpy.max([layer.blocklight / 15.0, layer.skylight * (self.daylight / 15.0)], axis=0)
+        return ((self.ambient_light + depth_light * self.depth_light + true_light * self.true_light) * 255.0 + 0.5).astype('u1')
+
+    def analyse_volume(self, volume):
+        ''' Takes a volume, returns two LayerRenderData, one for the floors, and one for
+        transparent objects. (In future, we might do more layers, because it's not nice to
+        lose train tracks or flowers when they are partially obscured by glass or torches.)'''
+        floor_heights, mask = volume.get_floor_heights_and_mask(self.low_limit, self.high_limit, False)
+        decoration_heights, mask2 = volume.get_transparent_item_heights_and_mask(floor_heights+1, self.high_limit)
+        mask2 = numpy.logical_and(mask, mask2)
+        floor_slice = volume.heightmap_slice(floor_heights)
+        transparent_slice = volume.heightmap_slice(decoration_heights)
+        floor_render_data = self.layerfactory.empty_render_data(floor_slice.dimensions)
+        transparent_render_data = self.layerfactory.empty_render_data(floor_slice.dimensions)
+        floor_render_data.texture_code[:,:] = floor_slice.get_texture_codes(mask)
+        floor_render_data.brightness[:,:] = self.apply_lighting(floor_slice, floor_heights)
+        floor_render_data.orientation[:,:]= floor_slice.get_orientations()
+        floor_render_data.alpha[:,:] = 255
+        transparent_render_data.texture_code[:,:] = transparent_slice.get_texture_codes(mask2)
+        transparent_render_data.brightness[:,:] = self.apply_lighting(transparent_slice, floor_heights)
+        transparent_render_data.orientation[:,:] = transparent_slice.get_orientations()
+        transparent_render_data.alpha[:,:] = 255
+        return floor_render_data, transparent_render_data
+        
+
+
+
+
 def do_shaded_colour_air_picture(fname):
     t=Timer()
     volume_factory = VolumeFactory(MultiTimer())
+    volume_analyser = VolumeAnalyser()
+    volume_analyser.low_limit=16
+    volume_analyser.high_limit=32
     t.start()
     region = volume_factory.load_region(fname)
-    #ch=Chunk((512,512))
-    #ch.load_region(fname)
     t.event("Loading")
-    for low, high in [(0,128)]: #34),(31,65),(63,97),(94,128)]:
-        chunk_slice = region[:,:,low:high] #ch.altitude_slice(low, high)
-        #deepest_air = chunk_slice.get_deepest_air()
-        #floor_heights = chunk_slice.get_highest_floor() - 1
-        max_heights = numpy.indices((512,512))[1] // 5
-        max_heights[:,:] = 16
-        #print "max_heights.shape (expecting (512,512)):", max_heights.shape
-        #floor_heights = chunk_slice.get_floor_heights(0,max_heights,False)
-        floor_heights, mask = chunk_slice.get_floor_heights_and_mask(0,max_heights,False)
-        decoration_heights, _ = chunk_slice.get_floor_heights_and_mask(floor_heights+1,max_heights,True)
-        #decoration_heights = chunk_slice.get_floor_heights(floor_heights+1,max_heights,True)
-        t.event("Deep air")
-        #floor_heights = deepest_air - 1
-        deepest_air = floor_heights + 1
-        t.event("Floor heights")
-        #colour_values = colour_array[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)]
-        t.event("Get cells using heightmap")
-        #colour_values = darken_by_depth(colour_values, deepest_air, 0.0, 128.0, 0.2, 1.0)
-        '''
-        colour_values = colour_values.astype('f4')
-        colour_values *= numpy.expand_dims(deepest_air,2)
-        colour_values = numpy.clip((colour_values / 36.0) + 32, 0.0, 255.0)
-        colour_values = colour_values.astype('i1')
-        '''
-        light_levels = light_levels_combined(deepest_air,
-            chunk_slice.blocklight, chunk_slice.skylight, 0.8, 1.4, 0.2)
-        light_levels[:,:] = 255.0
-        depth_lighting = numpy.clip((floor_heights)/16.0, 0.2, 1.0)
-        light_levels = numpy.clip(light_levels*depth_lighting, 20.0, 255.0)
-        t.event("Colour manipulation")
-        #alpha_values = numpy.ones((512,512,1), dtype='i1') * 255
-        #numpy.putmask(alpha_values, floor_heights == max_heights, 0)
-        #rgba_values = numpy.dstack([colour_values, alpha_values])
-        solidlayer = chunk_slice.heightmap_slice(floor_heights)
-        decorationlayer = chunk_slice.heightmap_slice(decoration_heights)
-        #blocks = get_cells_using_heightmap(chunk_slice.blocks, floor_heights)
-        #data = get_cells_using_heightmap(chunk_slice.data, floor_heights)
-        #block_array = tileid_advanced_mapping_array[blocks, data, 0]
-        #orientation_array = tileid_advanced_mapping_array[blocks, data, 1]
-        #transparent_blocks = get_cells_using_heightmap(chunk_slice.blocks, decoration_heights)
-        #transparent_data = get_cells_using_heightmap(chunk_slice.data, decoration_heights)
-        #transparent_block_array = tileid_advanced_mapping_array[transparent_blocks, transparent_data, 0]
-        #transparent_orientations = tileid_advanced_mapping_array[transparent_blocks, transparent_data, 1]
-        block_array = solidlayer.get_texture_codes(mask)
-        orientation_array = solidlayer.get_orientations()
-        transparent_block_array = decorationlayer.get_texture_codes(mask)
-        transparent_orientations = decorationlayer.get_orientations()
-        tilemapping.hacky_map_render(block_array, light_levels, orientation_array, transparent_block_array, transparent_orientations)  #tileid_mapping_bytes[get_cells_using_heightmap(chunk_slice.blocks, floor_heights)], light_levels)
-        #save_byte_image(rgba_values, fname+'_generalised_slice.png')
-        t.event("Finishing and saving")
+    ground_render_data, transparent_render_data = volume_analyser.analyse_volume(region)
+    tilemapping.hacky_map_render(ground_render_data.texture_code, ground_render_data.brightness, ground_render_data.orientation, transparent_render_data.texture_code, transparent_render_data.orientation)
+    #save_byte_image(rgba_values, fname+'_generalised_slice.png')
+    t.event("Finishing and saving")
 
 def x():
     do_shaded_colour_air_picture('world/region/r.0.0.mcr')
-#class Region(object):
-#    def __ini
-
-#def write_image
