@@ -4,3 +4,6 @@
 *.mcr
 /*.png
 /*.jpeg
+*.7z
+*.tar.gz
+/chorus

@@ -517,6 +517,7 @@ def do_shaded_colour_air_picture(fname):
     t=Timer()
     volume_factory = VolumeFactory(MultiTimer())
     volume_analyser = VolumeAnalyser()
+    # You can tweak the height limits here:
     volume_analyser.low_limit=16
     volume_analyser.high_limit=32
     t.start()
