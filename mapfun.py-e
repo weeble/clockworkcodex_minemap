@@ -187,14 +187,6 @@ def read(fname, x, z):
     f = open(fname, "rb")
     return get_chunk(f, x, z)
 
-def empty_array(dimensions, dtype='u1'):
-    w,h = dimensions
-    return numpy.zeros((w,h,128), dtype=dtype)
-
-def empty_region_array(dtype='u1'):
-    return numpy.zeros((512,512,128), dtype=dtype)
-
-
 class HeightMappedSlice(object):
     def __init__(self, chunk, heightmap):
         self.blocks = get_cells_using_heightmap(chunk.blocks, heightmap)
@@ -253,7 +245,7 @@ class VolumeFactory(object):
                 self.timer.start("copying")
                 region[16*x:16*(x+1), 16*z:16*(z+1), :] = chunk
                 self.timer.stop()
-        self.timer.report()
+        #self.timer.report()
         return region
 
 class CellArray(object):
@@ -368,7 +360,6 @@ class Volume(CellArray):
         floor_heights = (max_height-2)-numpy.argmax(good_floors[:,:,::-1], axis=2)
         mask = get_cells_using_heightmap(good_floors, floor_heights)
         return numpy.clip(floor_heights, low_limit, high_limit), mask
-        
 
 def get_cells_using_heightmap(source, heightmap):
     idx = [numpy.arange(dimension) for dimension in source.shape]
@@ -376,26 +367,8 @@ def get_cells_using_heightmap(source, heightmap):
     idx[2] = numpy.expand_dims(heightmap, 2)
     return numpy.squeeze(source[idx])
 
-
 def save_byte_image(data, filename):
     PIL.Image.fromarray(data.astype('u1')[:,::-1]).save(filename)
-
-def do_air_picture(fname):
-    ch=Chunk((512,512))
-    ch.load_region(fname)
-    save_byte_image(ch.get_deepest_air(), fname+'_deepair.png')
-
-def do_colour_air_picture(fname):
-    ch=Chunk((512,512))
-    ch.load_region(fname)
-    deepest_air = ch.get_deepest_air()
-    floor_heights = deepest_air - 1
-    colour_values = colour_array[get_cells_using_heightmap(ch.blocks, floor_heights)]
-    alpha_values = numpy.ones((512,512,1), dtype='i1') * 255
-    rgba_values = numpy.dstack([colour_values, alpha_values])
-    save_byte_image(rgba_values, fname+'_colourdeepair.png')
-
-    
 
 class AccTimer(object):
     def __init__(self):
@@ -410,10 +383,22 @@ class AccTimer(object):
 class MultiTimer(object):
     def __init__(self):
         self.timers = defaultdict(AccTimer)
+        self.stack = []
         self.current = None
+        self.report_format = []
+    def push(self, name):
+        self.start(name)
+        self.stack.append(self.current)
+        self.current = None
+    def pop(self):
+        self.stop()
+        self.current = self.stack.pop()
+        self.stop()
     def start(self, name):
         if self.current is not None:
             self.timers[self.current].stop()
+        if name not in self.timers:
+            self.report_format.append((name, len(self.stack)))
         self.timers[name].start()
         self.current = name
     def stop(self):
@@ -421,58 +406,10 @@ class MultiTimer(object):
             self.timers[self.current].stop()
         self.current = None
     def report(self):
-        for name, timer in self.timers.items():
-            print name, "%.2fs" % timer.acc
-        
-
-class Timer(object):
-    def __init__(self):
-        self.lasttime=None
-    def start(self):
-        self.lasttime = time.time()
-    def event(self, name=""):
-        newtime = time.time()
-        elapsed = ("%.2fs" % (newtime - self.lasttime)) if self.lasttime is not None else "N/A"
-        print name, elapsed
-        self.lasttime = newtime
-    def stop(self):
-        self.lasttime = time.time()
-
-def darken_by_depth(colour_array, depth_array, low_depth, high_depth, low_brightness, high_brightness):
-    colour_values = colour_array.astype('f4')
-    delta_depth = float(high_depth - low_depth)
-    delta_brightness = float(high_brightness - low_brightness)
-    colour_values *= numpy.expand_dims((((depth_array - low_depth) / delta_depth) + low_brightness) * delta_brightness,2)
-    colour_values = numpy.clip(colour_values, 0.0, 255.0)
-    return colour_values #.astype('i1')
-    
-def darken_by_blocklight(colour_array, depth_array, blocklight, low_brightness, high_brightness):
-    #colour_values = colour_array.astype('f4')
-    light_levels = get_cells_using_heightmap(blocklight, depth_array)
-    return darken_by_depth(colour_array, light_levels, 0.0, 15.0, low_brightness, high_brightness)
-
-def darken_by_combined_light(colour_array, depth_array, blocklight, skylight, low_brightness, high_brightness, daylight):
-    block_light_levels = get_cells_using_heightmap(blocklight, depth_array)
-    sky_light_levels = get_cells_using_heightmap(skylight, depth_array)
-    light_levels = numpy.max([block_light_levels.astype('f4'), sky_light_levels.astype('f4') * daylight], axis=0)
-    return darken_by_depth(colour_array, light_levels, 0.0, 15.0, low_brightness, high_brightness)
-    
-def light_levels_combined(depth_array, blocklight, skylight, low_brightness, high_brightness, daylight):
-    block_light_levels = get_cells_using_heightmap(blocklight, depth_array)
-    sky_light_levels = get_cells_using_heightmap(skylight, depth_array)
-    light_levels = numpy.max([block_light_levels.astype('f4'), sky_light_levels.astype('f4') * daylight], axis=0)
-    low_depth = 0
-    high_depth = 15
-    delta_depth = float(high_depth - low_depth)
-    delta_brightness = float(high_brightness - low_brightness)
-    new_light_levels = (((light_levels - low_depth) / delta_depth) + low_brightness) * delta_brightness
-    return numpy.clip(new_light_levels*255.0, 0.0, 255.0)
-
-def array_rescale(array, old_low_value, old_high_value, new_low_value, new_high_value):
-    old_delta = old_high_value - old_low_value
-    new_delta = new_high_value - new_low_value
-    return (array - old_low_value) / old_delta * new_delta + new_low_value
-
+        for name, depth in self.report_format:
+            print ("  "*depth) + name, "%.3fs" % self.timers[name].acc
+        #for name, timer in self.timers.items():
+        #    print name, "%.2fs" % timer.acc
 
 class VolumeAnalyser(object):
     low_limit = 0
@@ -483,6 +420,9 @@ class VolumeAnalyser(object):
     daylight = 0.0
     layerfactory = LayerRenderDataFactory()
 
+    def __init__(self, multitimer):
+        self.multitimer = multitimer
+
     def apply_lighting(self, layer, heightmap):
         depth_light = (heightmap - 1.0 * self.low_limit) / (1.0 * (self.high_limit - self.low_limit))
         true_light = numpy.max([layer.blocklight / 15.0, layer.skylight * (self.daylight / 15.0)], axis=0)
@@ -492,13 +432,17 @@ class VolumeAnalyser(object):
         ''' Takes a volume, returns two LayerRenderData, one for the floors, and one for
         transparent objects. (In future, we might do more layers, because it's not nice to
         lose train tracks or flowers when they are partially obscured by glass or torches.)'''
+        self.multitimer.start("floor_heights")
         floor_heights, mask = volume.get_floor_heights_and_mask(self.low_limit, self.high_limit, False)
+        self.multitimer.start("decoration_heights")
         decoration_heights, mask2 = volume.get_transparent_item_heights_and_mask(floor_heights+1, self.high_limit)
+        self.multitimer.start("slicing")
         mask2 = numpy.logical_and(mask, mask2)
         floor_slice = volume.heightmap_slice(floor_heights)
         transparent_slice = volume.heightmap_slice(decoration_heights)
         floor_render_data = self.layerfactory.empty_render_data(floor_slice.dimensions)
         transparent_render_data = self.layerfactory.empty_render_data(floor_slice.dimensions)
+        self.multitimer.start("assembly")
         floor_render_data.texture_code[:,:] = floor_slice.get_texture_codes(mask)
         floor_render_data.brightness[:,:] = self.apply_lighting(floor_slice, floor_heights)
         floor_render_data.orientation[:,:]= floor_slice.get_orientations()
@@ -507,6 +451,7 @@ class VolumeAnalyser(object):
         transparent_render_data.brightness[:,:] = self.apply_lighting(transparent_slice, floor_heights)
         transparent_render_data.orientation[:,:] = transparent_slice.get_orientations()
         transparent_render_data.alpha[:,:] = 255
+        self.multitimer.stop()
         return floor_render_data, transparent_render_data
         
 
@@ -514,19 +459,23 @@ class VolumeAnalyser(object):
 
 
 def do_shaded_colour_air_picture(fname):
-    t=Timer()
-    volume_factory = VolumeFactory(MultiTimer())
-    volume_analyser = VolumeAnalyser()
+    mt = MultiTimer()
+    mt.push("Total")
+    volume_factory = VolumeFactory(mt)
+    volume_analyser = VolumeAnalyser(mt)
     # You can tweak the height limits here:
     volume_analyser.low_limit=16
     volume_analyser.high_limit=32
-    t.start()
+    mt.push("load_region")
     region = volume_factory.load_region(fname)
-    t.event("Loading")
+    mt.pop()
+    mt.push("analyse_volume")
     ground_render_data, transparent_render_data = volume_analyser.analyse_volume(region)
+    mt.pop()
+    mt.pop()
+    mt.report()
     tilemapping.hacky_map_render(ground_render_data.texture_code, ground_render_data.brightness, ground_render_data.orientation, transparent_render_data.texture_code, transparent_render_data.orientation)
     #save_byte_image(rgba_values, fname+'_generalised_slice.png')
-    t.event("Finishing and saving")
 
 def x():
     do_shaded_colour_air_picture('world/region/r.0.0.mcr')
