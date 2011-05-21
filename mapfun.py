@@ -341,8 +341,8 @@ class LayerRenderData(object):
     def orientation(self):
         return self._data['orientation']
     @property
-    def alpha(self):
-        return self._data['alpha']
+    def altitude(self):
+        return self._data['altitude']
     def __getitem__(self, index):
         data = self._data[index]
         return LayerRenderData(data)
@@ -357,7 +357,7 @@ class LayerRenderDataFactory(object):
                 ('texture_code', 'u1'),
                 ('brightness', 'u1'),
                 ('orientation', 'u1'),
-                ('alpha', 'u1')])
+                ('altitude', 'u1')])
         return LayerRenderData(data)
 
 class Volume(CellArray):
@@ -487,11 +487,11 @@ class VolumeAnalyser(object):
         floor_render_data.texture_code[:,:] = floor_slice.get_texture_codes(mask)
         floor_render_data.brightness[:,:] = self.apply_lighting(floor_slice, floor_heights)
         floor_render_data.orientation[:,:]= floor_slice.get_orientations()
-        floor_render_data.alpha[:,:] = 255
+        floor_render_data.altitude[:,:] = floor_heights
         transparent_render_data.texture_code[:,:] = transparent_slice.get_texture_codes(mask2)
         transparent_render_data.brightness[:,:] = self.apply_lighting(transparent_slice, floor_heights)
         transparent_render_data.orientation[:,:] = transparent_slice.get_orientations()
-        transparent_render_data.alpha[:,:] = 255
+        transparent_render_data.altitude[:,:] = floor_heights
         self.multitimer.stop()
         return floor_render_data, transparent_render_data
         
@@ -515,9 +515,16 @@ def do_shaded_colour_air_picture(fname,low_limit,high_limit):
     mt.pop()
     mt.pop()
     mt.report()
-    tilemapping.hacky_map_render(ground_render_data.texture_code, ground_render_data.brightness, ground_render_data.orientation, transparent_render_data.texture_code, transparent_render_data.orientation)
+    tilemapping.hacky_map_render(
+        ground_render_data.texture_code,
+        ground_render_data.brightness,
+        ground_render_data.orientation,
+        ground_render_data.altitude,
+        transparent_render_data.texture_code,
+        transparent_render_data.orientation,
+        transparent_render_data.altitude)
     #save_byte_image(rgba_values, fname+'_generalised_slice.png')
 
 def x():
     #do_shaded_colour_air_picture('world/region/r.0.0.mcr')
-    do_shaded_colour_air_picture('chorus/world/region', 0, 35) #/r.0.-1.mcr',0,128)
+    do_shaded_colour_air_picture('chorus/world/region', 0, 128) #/r.0.-1.mcr',0,128)

@@ -166,26 +166,81 @@ void main()
 fragment_shader = '''\
 #version 130
 
+const float MAX_ALT_DELTA = 3.0;
+const float TILE_COUNT = 512.0;
+const float INV_TILE_COUNT = 1.0 / TILE_COUNT;
+
+// cardinal directions:
+const int LE_MI = 0;
+const int RI_MI = 1;
+const int CE_UP = 2;
+const int CE_DO = 3;
+
+// diagonals:
+const int LE_UP = 4;
+const int RI_UP = 5;
+const int LE_DO = 6;
+const int RI_DO = 7;
+
 uniform sampler2D textures[2];
 
 varying vec2 texcoord;
+
+float lightcalc(in float alt_delta, in float distance)
+{
+    return clamp(distance * MAX_ALT_DELTA / clamp(255.0 * alt_delta, 0.001, MAX_ALT_DELTA), 0.0, 1.0);
+}
+
+float cornerlight(in float side1, in float side2, in float corner, in float distance1, in float distance2)
+{
+    float side1light = lightcalc(side1, distance1);
+    float side2light = lightcalc(side2, distance2);
+    float corner1light = lightcalc(corner, distance1);
+    float corner2light = lightcalc(corner, distance2);
+    // TODO: Figure out why the 2* multiplier is needed in the next line!
+    return side1light*side2light - 2*max(0, side1light-corner1light)*max(0, side2light-corner2light);
+}
 
 void main()
 {
     vec2 theta;
 
-    theta = (mod(texcoord*0.5+0.5, 1.0/512.0) * 512.0)*2.0 - 1.0; // / 16.0)*2.0 - 1.0;
-    //float utheta = mod(texcoord.x, 1.0/512.0);
-    //float vtheta = mod(texcoord.y, 1.0/512.0);
+    theta = (mod(texcoord*0.5+0.5, 1.0/512.0) * 512.0)*2.0 - 1.0;
     float xx = -texcoord.y * 0.5 + 0.5;
     float yy = texcoord.x * 0.5 + 0.5;
     vec4 tiles_sample = texture2D(textures[0], vec2(xx,yy));
+
+    // Sample the altitude of the neighbouring tiles for the ambient occlusion calculation:
+    float altitude = tiles_sample.w;
+    float modicum = 1.0/512.0;
+    float alts[8];
+
+    /*
+    alts[LE_MI] = texture2D(textures[0], vec2(xx-modicum,yy)).w-altitude;
+    alts[RI_MI] = altitude + (1.0/255.0); // texture2D(textures[0], vec2(xx+modicum,yy)).w-altitude;
+    alts[CE_UP] = texture2D(textures[0], vec2(xx,yy+modicum)).w-altitude;
+    alts[LE_UP] = texture2D(textures[0], vec2(xx-modicum,yy+modicum)).w-altitude;
+    alts[RI_UP] = altitude + (1.0/255.0); //texture2D(textures[0], vec2(xx+modicum,yy+modicum)).w-altitude;
+    alts[CE_DO] = altitude + (2.0/255.0); //texture2D(textures[0], vec2(xx,yy-modicum)).w-altitude;
+    alts[LE_DO] = texture2D(textures[0], vec2(xx-modicum,yy-modicum)).w-altitude;
+    alts[RI_DO] = texture2D(textures[0], vec2(xx+modicum,yy-modicum)).w-altitude;
+    */
+    alts[LE_MI] = texture2D(textures[0], vec2(xx-modicum,yy)).w-altitude;
+    alts[RI_MI] = texture2D(textures[0], vec2(xx+modicum,yy)).w-altitude;
+    alts[CE_UP] = texture2D(textures[0], vec2(xx,yy+modicum)).w-altitude;
+    alts[LE_UP] = texture2D(textures[0], vec2(xx-modicum,yy+modicum)).w-altitude;
+    alts[RI_UP] = texture2D(textures[0], vec2(xx+modicum,yy+modicum)).w-altitude;
+    alts[CE_DO] = texture2D(textures[0], vec2(xx,yy-modicum)).w-altitude;
+    alts[LE_DO] = texture2D(textures[0], vec2(xx-modicum,yy-modicum)).w-altitude;
+    alts[RI_DO] = texture2D(textures[0], vec2(xx+modicum,yy-modicum)).w-altitude;
+
+    // Calculate a transformation for the tile (lets us rotate and flip oriented textures, like rail-tracks):
     float flipx = (tiles_sample.z * 255.0) >= 8.0 ? -1.0 : 1.0;
     float rotation = mod(tiles_sample.z * 255.0, 8.0) * 0.5 * 3.141592653589793;
-    //float rotation = 0;
     mat2 transform = mat2(
         flipx * cos(rotation),   flipx * sin(rotation),
         -sin(rotation),          cos(rotation));
+
     float tile_value = round(255.0 * tiles_sample.x);
     float uphi = mod(tile_value, 16.0);
     float vphi = floor(tile_value / 16.0);
@@ -193,6 +248,15 @@ void main()
     gl_FragColor = texture2D(textures[1], atlas_point);
     // Green channel contains a brightness multiplier:
     gl_FragColor.xyz *= tiles_sample.y;
+
+    const float SCALE = 1.0; ///256.0;
+    float ambient_light = 0.25 * (
+        cornerlight(alts[LE_MI], alts[CE_UP], alts[LE_UP], 1-theta.y * SCALE, 1-theta.x * SCALE) +
+        cornerlight(alts[RI_MI], alts[CE_UP], alts[RI_UP], 1+theta.y * SCALE, 1-theta.x * SCALE) +
+        cornerlight(alts[LE_MI], alts[CE_DO], alts[LE_DO], 1-theta.y * SCALE, 1+theta.x * SCALE) +
+        cornerlight(alts[RI_MI], alts[CE_DO], alts[RI_DO], 1+theta.y * SCALE, 1+theta.x * SCALE));
+    gl_FragColor.xyz *= ambient_light;
+    //gl_FragColor.xyz = vec3(ambient_light);
 }
 '''
 
@@ -220,9 +284,9 @@ def make_resources(tilemap, tilemap2):
         element_buffer_data,
         element_buffer_data.nbytes)
     resources.textures=[
-        make_texture(image=tilemap, interpolate=False),
+        make_alpha_texture(image=tilemap, interpolate=False),
         make_alpha_texture(image=atlas, interpolate=False),
-        make_texture(image=tilemap2, interpolate=False)]
+        make_alpha_texture(image=tilemap2, interpolate=False)]
     resources.vertex_shader=make_shader(
         GL_VERTEX_SHADER,
         vertex_shader)
@@ -382,7 +446,9 @@ def make_surface(array):
     if depth == 4:
         surf = pygame.Surface((w,h), depth=32, flags=pygame.SRCALPHA)
         pixels = pygame.surfarray.pixels3d(surf)
-        pixels[:,:,:depth] = array
+        pixels[:,:,:] = array[:,:,:3]
+        alpha = pygame.surfarray.pixels_alpha(surf)
+        alpha[:,:] = array[:,:,3]
     elif depth == 3:
         surf = pygame.Surface((w,h), depth=32)
         pixels = pygame.surfarray.pixels3d(surf)
@@ -391,17 +457,19 @@ def make_surface(array):
         raise ValueError("Array must have minor dimension of 3 or 4.")
     return surf
 
-def hacky_map_render(tilemap, light_values, orientation_array, tilemap2, orientation2):
+def hacky_map_render(tilemap, light_values, orientation_array, altitudes, tilemap2, orientation2, altitudes2):
     w,h = tilemap.shape
-    pixels = numpy.zeros((w,h,3), dtype='u1')
+    pixels = numpy.zeros((w,h,4), dtype='u1')
     pixels[:,:,0] = tilemap
     pixels[:,:,1] = light_values
     pixels[:,:,2] = orientation_array #numpy.mod(numpy.indices((w,h))[1],16)
+    pixels[:,:,3] = altitudes
 
-    pixels2 = numpy.zeros((w,h,3), dtype='u1')
+    pixels2 = numpy.zeros((w,h,4), dtype='u1')
     pixels2[:,:,0] = tilemap2
     pixels2[:,:,1] = light_values
     pixels2[:,:,2] = orientation2
+    pixels2[:,:,3] = altitudes2
     #numpy.dstack([tilemap2, light_values, orientation2])
     print pixels[190,300:320,2]
     print "Pixel shape (expecting (8192, 8192, 3)):", pixels.shape
