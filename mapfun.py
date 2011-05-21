@@ -7,6 +7,7 @@ import numpy
 import time
 from collections import defaultdict
 import tilemapping
+import os.path
 
 white = [255,255,255]
 grey = [128,128,128]
@@ -247,6 +248,46 @@ class VolumeFactory(object):
                 self.timer.stop()
         #self.timer.report()
         return region
+    def load_rectangle(self, regiondir, xmin, zmin, xmax, zmax):
+        chunk_xmin = xmin // 16
+        chunk_xmax = (xmax + 15) // 16
+        chunk_zmin = zmin // 16
+        chunk_zmax = (zmax + 15) // 16
+        region_files = {}
+        chunk = self.empty_volume((16,16,128))
+        volume = self.empty_volume((16*(chunk_xmax-chunk_xmin), 16*(chunk_zmax-chunk_zmin), 128))
+        for chunkz in xrange(chunk_zmin, chunk_zmax):
+            for chunkx in xrange(chunk_xmin, chunk_xmax):
+                fname = "r.{0}.{1}.mcr".format(chunkx//32, chunkz//32)
+                if fname not in region_files:
+                    try:
+                        region_files[fname] = open(os.path.join(regiondir,fname), "rb")
+                    except:
+                        region_files[fname] = None
+                f = region_files[fname]
+                if f is None:
+                    chunkdata = None
+                else:
+                    self.timer.push("get_chunk")
+                    chunkdata = get_chunk(f, chunkx % 32, chunkz % 32, self.timer)
+                    self.timer.pop()
+                self.timer.push("load_chunk")
+                self.load_chunk(chunkdata, volume=chunk)
+                self.timer.pop()
+                self.timer.start("copy_chunk_to_volume")
+                chunkix = chunkx - chunk_xmin
+                chunkiz = chunkz - chunk_zmin
+                #print 16*chunkix, 16*(chunkix+1), 16*chunkiz, 16*(chunkiz+1)
+                volume[16*chunkix:16*(chunkix+1), 16*chunkiz:16*(chunkiz+1), :] = chunk
+                self.timer.stop()
+        for f in region_files.values():
+            if f is not None:
+                f.close()
+        return volume
+
+
+
+
 
 class CellArray(object):
     def __init__(self, data):
@@ -458,16 +499,16 @@ class VolumeAnalyser(object):
 
 
 
-def do_shaded_colour_air_picture(fname):
+def do_shaded_colour_air_picture(fname,low_limit,high_limit):
     mt = MultiTimer()
     mt.push("Total")
     volume_factory = VolumeFactory(mt)
     volume_analyser = VolumeAnalyser(mt)
     # You can tweak the height limits here:
-    volume_analyser.low_limit=16
-    volume_analyser.high_limit=32
+    volume_analyser.low_limit=low_limit
+    volume_analyser.high_limit=high_limit
     mt.push("load_region")
-    region = volume_factory.load_region(fname)
+    region = volume_factory.load_rectangle(fname, -256, -512, 256, 0)
     mt.pop()
     mt.push("analyse_volume")
     ground_render_data, transparent_render_data = volume_analyser.analyse_volume(region)
@@ -478,4 +519,5 @@ def do_shaded_colour_air_picture(fname):
     #save_byte_image(rgba_values, fname+'_generalised_slice.png')
 
 def x():
-    do_shaded_colour_air_picture('world/region/r.0.0.mcr')
+    #do_shaded_colour_air_picture('world/region/r.0.0.mcr')
+    do_shaded_colour_air_picture('chorus/world/region', 0, 35) #/r.0.-1.mcr',0,128)
