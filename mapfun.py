@@ -8,6 +8,7 @@ import time
 from collections import defaultdict
 import tilemapping
 import os.path
+import sys
 
 white = [255,255,255]
 grey = [128,128,128]
@@ -499,7 +500,7 @@ class VolumeAnalyser(object):
 
 
 
-def do_shaded_colour_air_picture(fname,low_limit,high_limit):
+def do_shaded_colour_air_picture(fname,low_limit,high_limit,centre=(256,256)):
     mt = MultiTimer()
     mt.push("Total")
     volume_factory = VolumeFactory(mt)
@@ -508,10 +509,22 @@ def do_shaded_colour_air_picture(fname,low_limit,high_limit):
     volume_analyser.low_limit=low_limit
     volume_analyser.high_limit=high_limit
     mt.push("load_region")
-    region = volume_factory.load_rectangle(fname, -256, -512, 256, 0)
+    #region = volume_factory.load_rectangle(fname, -256, -512, 256, 0)
     mt.pop()
     mt.push("analyse_volume")
-    ground_render_data, transparent_render_data = volume_analyser.analyse_volume(region)
+    x,y = centre
+    ground_render_data = volume_analyser.layerfactory.empty_render_data((512,512))
+    transparent_render_data = volume_analyser.layerfactory.empty_render_data((512,512))
+    sys.stdout.write("[                ]\x0d[")
+    for y1,y2 in [(0,128),(128,256),(256,384),(384,512)]:
+        for x1,x2 in [(0,128),(128,256),(256,384),(384,512)]:
+            local_region = volume_factory.load_rectangle(fname, y1-256+y, x1-256+x, y2-256+y, x2-256+x)
+            ground_render_data_small, transparent_render_data_small = volume_analyser.analyse_volume(local_region) #region[y1:y2,x1:x2])
+            ground_render_data[y1:y2,x1:x2] = ground_render_data_small
+            transparent_render_data[y1:y2,x1:x2] = transparent_render_data_small
+            sys.stdout.write("=")
+            sys.stdout.flush()
+    print
     mt.pop()
     mt.pop()
     mt.report()
@@ -527,4 +540,6 @@ def do_shaded_colour_air_picture(fname,low_limit,high_limit):
 
 def x():
     #do_shaded_colour_air_picture('world/region/r.0.0.mcr')
-    do_shaded_colour_air_picture('chorus/world/region', 0, 128) #/r.0.-1.mcr',0,128)
+    CHORUSMAP = 'chorus/world/region'
+    ROBBIEMAP = 'world/region'
+    do_shaded_colour_air_picture(ROBBIEMAP, 0, 20, centre=(256,256)) #/r.0.-1.mcr',0,128)

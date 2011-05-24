@@ -69,9 +69,10 @@ atlas = pygame.image.load('terrain.png')
 
 
 
-def render(resources, position, zoom):
+def render(resources, position, zoom, screen_dimensions):
+    screen_w, screen_h = screen_dimensions
     glBindFramebuffer(GL_FRAMEBUFFER, 0) #resources.framebuffer_object)
-    glViewport(0,0,800,600)
+    glViewport(0,0,screen_w,screen_h)
     glClearColor(0.4, 0.4, 0.4, 1.0)
     glClear(GL_COLOR_BUFFER_BIT)
 
@@ -82,7 +83,7 @@ def render(resources, position, zoom):
 
         glUseProgram(resources.program)
         #glUniform1f(resources.uniforms.timer, resources.timer)
-        glUniform2f(resources.uniforms['screen_dimensions'], 800.0, 600.0)
+        glUniform2f(resources.uniforms['screen_dimensions'], screen_w, screen_h)
         glUniform2f(resources.uniforms['cam_position'], position[0], position[1])
         glUniform1f(resources.uniforms['zoom'], zoom)
         glUniform1f(resources.uniforms['tile_dimension'], 16.0) 
@@ -205,34 +206,23 @@ void main()
 {
     vec2 theta;
 
-    theta = (mod(texcoord*0.5+0.5, 1.0/512.0) * 512.0)*2.0 - 1.0;
+    theta = (mod(texcoord*0.5+0.5, INV_TILE_COUNT) * TILE_COUNT)*2.0 - 1.0;
     float xx = -texcoord.y * 0.5 + 0.5;
     float yy = texcoord.x * 0.5 + 0.5;
     vec4 tiles_sample = texture2D(textures[0], vec2(xx,yy));
 
     // Sample the altitude of the neighbouring tiles for the ambient occlusion calculation:
     float altitude = tiles_sample.w;
-    float modicum = 1.0/512.0;
     float alts[8];
 
-    /*
-    alts[LE_MI] = texture2D(textures[0], vec2(xx-modicum,yy)).w-altitude;
-    alts[RI_MI] = altitude + (1.0/255.0); // texture2D(textures[0], vec2(xx+modicum,yy)).w-altitude;
-    alts[CE_UP] = texture2D(textures[0], vec2(xx,yy+modicum)).w-altitude;
-    alts[LE_UP] = texture2D(textures[0], vec2(xx-modicum,yy+modicum)).w-altitude;
-    alts[RI_UP] = altitude + (1.0/255.0); //texture2D(textures[0], vec2(xx+modicum,yy+modicum)).w-altitude;
-    alts[CE_DO] = altitude + (2.0/255.0); //texture2D(textures[0], vec2(xx,yy-modicum)).w-altitude;
-    alts[LE_DO] = texture2D(textures[0], vec2(xx-modicum,yy-modicum)).w-altitude;
-    alts[RI_DO] = texture2D(textures[0], vec2(xx+modicum,yy-modicum)).w-altitude;
-    */
-    alts[LE_MI] = texture2D(textures[0], vec2(xx-modicum,yy)).w-altitude;
-    alts[RI_MI] = texture2D(textures[0], vec2(xx+modicum,yy)).w-altitude;
-    alts[CE_UP] = texture2D(textures[0], vec2(xx,yy+modicum)).w-altitude;
-    alts[LE_UP] = texture2D(textures[0], vec2(xx-modicum,yy+modicum)).w-altitude;
-    alts[RI_UP] = texture2D(textures[0], vec2(xx+modicum,yy+modicum)).w-altitude;
-    alts[CE_DO] = texture2D(textures[0], vec2(xx,yy-modicum)).w-altitude;
-    alts[LE_DO] = texture2D(textures[0], vec2(xx-modicum,yy-modicum)).w-altitude;
-    alts[RI_DO] = texture2D(textures[0], vec2(xx+modicum,yy-modicum)).w-altitude;
+    alts[LE_MI] = texture2D(textures[0], vec2(xx-INV_TILE_COUNT,yy)).w-altitude;
+    alts[RI_MI] = texture2D(textures[0], vec2(xx+INV_TILE_COUNT,yy)).w-altitude;
+    alts[CE_UP] = texture2D(textures[0], vec2(xx,yy+INV_TILE_COUNT)).w-altitude;
+    alts[LE_UP] = texture2D(textures[0], vec2(xx-INV_TILE_COUNT,yy+INV_TILE_COUNT)).w-altitude;
+    alts[RI_UP] = texture2D(textures[0], vec2(xx+INV_TILE_COUNT,yy+INV_TILE_COUNT)).w-altitude;
+    alts[CE_DO] = texture2D(textures[0], vec2(xx,yy-INV_TILE_COUNT)).w-altitude;
+    alts[LE_DO] = texture2D(textures[0], vec2(xx-INV_TILE_COUNT,yy-INV_TILE_COUNT)).w-altitude;
+    alts[RI_DO] = texture2D(textures[0], vec2(xx+INV_TILE_COUNT,yy-INV_TILE_COUNT)).w-altitude;
 
     // Calculate a transformation for the tile (lets us rotate and flip oriented textures, like rail-tracks):
     float flipx = (tiles_sample.z * 255.0) >= 8.0 ? -1.0 : 1.0;
@@ -244,19 +234,21 @@ void main()
     float tile_value = round(255.0 * tiles_sample.x);
     float uphi = mod(tile_value, 16.0);
     float vphi = floor(tile_value / 16.0);
-    vec2 atlas_point = (vec2(uphi, vphi) + 0.5) / 16.0 + (transform * theta * 0.5 / 16.0); // vec2(utheta, vtheta) / (16.0/512.0);
+    vec2 atlas_point = (vec2(uphi, vphi) + 0.5) / 16.0 + (transform * theta * 0.5 / 16.0);
     gl_FragColor = texture2D(textures[1], atlas_point);
     // Green channel contains a brightness multiplier:
     gl_FragColor.xyz *= tiles_sample.y;
 
-    const float SCALE = 1.0; ///256.0;
+    float left_distance = max(0.001, 1-theta.y);
+    float right_distance = max(0.001, 1+theta.y);
+    float bottom_distance = max(0.001, 1+theta.x);
+    float top_distance = max(0.001, 1-theta.x);
     float ambient_light = 0.25 * (
-        cornerlight(alts[LE_MI], alts[CE_UP], alts[LE_UP], 1-theta.y * SCALE, 1-theta.x * SCALE) +
-        cornerlight(alts[RI_MI], alts[CE_UP], alts[RI_UP], 1+theta.y * SCALE, 1-theta.x * SCALE) +
-        cornerlight(alts[LE_MI], alts[CE_DO], alts[LE_DO], 1-theta.y * SCALE, 1+theta.x * SCALE) +
-        cornerlight(alts[RI_MI], alts[CE_DO], alts[RI_DO], 1+theta.y * SCALE, 1+theta.x * SCALE));
+        cornerlight(alts[LE_MI], alts[CE_UP], alts[LE_UP], left_distance, top_distance) +
+        cornerlight(alts[RI_MI], alts[CE_UP], alts[RI_UP], right_distance, top_distance) +
+        cornerlight(alts[LE_MI], alts[CE_DO], alts[LE_DO], left_distance, bottom_distance) +
+        cornerlight(alts[RI_MI], alts[CE_DO], alts[RI_DO], right_distance, bottom_distance));
     gl_FragColor.xyz *= ambient_light;
-    //gl_FragColor.xyz = vec3(ambient_light);
 }
 '''
 
@@ -484,7 +476,8 @@ def hacky_map_render(tilemap, light_values, orientation_array, altitudes, tilema
     pygame.time.get_ticks = lambda:int(time.time()*1000)
     #pygame.font.init()
 
-    surface = pygame.display.set_mode((800,600), video_flags)
+    screen_dimensions = 1024, 768 #800,600
+    surface = pygame.display.set_mode(screen_dimensions, video_flags)
     #resources = make_resources(pygame.surfarray.make_surface(pixels))
     resources = make_resources(make_surface(pixels), make_surface(pixels2))
     update_timer(resources)
@@ -532,7 +525,7 @@ def hacky_map_render(tilemap, light_values, orientation_array, altitudes, tilema
                 if event.button == 1:
                     dragging = False
         update_timer(resources)
-        render(resources, position, zoom)
+        render(resources, position, zoom, screen_dimensions)
         frames += 1
     elapsed_ticks = pygame.time.get_ticks()-ticks
     if elapsed_ticks>0:
