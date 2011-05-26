@@ -276,9 +276,9 @@ def make_resources(tilemap, tilemap2):
         element_buffer_data,
         element_buffer_data.nbytes)
     resources.textures=[
-        make_alpha_texture(image=tilemap, interpolate=False),
-        make_alpha_texture(image=atlas, interpolate=False),
-        make_alpha_texture(image=tilemap2, interpolate=False)]
+        make_texture(image=tilemap, interpolate=False, alpha=True),
+        make_texture(image=atlas, interpolate=False, alpha=True),
+        make_texture(image=tilemap2, interpolate=False, alpha=True)]
     resources.vertex_shader=make_shader(
         GL_VERTEX_SHADER,
         vertex_shader)
@@ -296,13 +296,6 @@ def make_resources(tilemap, tilemap2):
         'tile_dimension',
         'textures[0]',
         'textures[1]')
-    #resources.uniforms=Uniforms()
-    #resources.uniforms.timer = glGetUniformLocation(
-    #    resources.program,
-    #    "timer")
-    #resources.uniforms.textures =[
-    #    glGetUniformLocation(resources.program, "textures[0]"),
-    #    glGetUniformLocation(resources.program, "textures[1]")]
     resources.attributes=Attributes()
     resources.attributes.position = glGetAttribLocation(
         resources.program, "position")
@@ -315,10 +308,10 @@ class State(object):
     timer = 0
     camera_pos = float_array(0,0,-3)
 
-def make_alpha_texture(filename=None, image=None, interpolate=True):
+def make_texture(filename=None, image=None, interpolate=True, alpha=False):
     if image == None:
         image = pygame.image.load(filename)
-    pixels = pygame.image.tostring(image, "RGBA", True)
+    pixels = pygame.image.tostring(image, "RGBA" if alpha else "RGB", True)
     texture=glGenTextures(1)
     glBindTexture(GL_TEXTURE_2D, texture)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
@@ -326,28 +319,14 @@ def make_alpha_texture(filename=None, image=None, interpolate=True):
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE)
     glTexImage2D(
-        GL_TEXTURE_2D, 0,
-        GL_RGBA8,
-        image.get_width(), image.get_height(), 0,
-        GL_RGBA, GL_UNSIGNED_BYTE,
-        pixels)
-    return texture
-
-def make_texture(filename=None, image=None, interpolate=True):
-    if image == None:
-        image = pygame.image.load(filename)
-    pixels = pygame.image.tostring(image, "RGB", True)
-    texture=glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, texture)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE)
-    glTexImage2D(
-        GL_TEXTURE_2D, 0,
-        GL_RGB8,
-        image.get_width(), image.get_height(), 0,
-        GL_RGB, GL_UNSIGNED_BYTE,
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA8 if alpha else GL_RGB8,
+        image.get_width(),
+        image.get_height(),
+        0,
+        GL_RGBA if alpha else GL_RGB,
+        GL_UNSIGNED_BYTE,
         pixels)
     return texture
 
