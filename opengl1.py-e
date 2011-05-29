@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 # Copyright 2011, Andrew Wilson
-# Licensed under the MIT license: http://www.opensource.org/licenses/MIT
+# Licensed under the MIT license:
+# http://www.opensource.org/licenses/MIT
 #
 # Minecraft mapping - Rendering something with OpenGL
 #
@@ -9,52 +10,9 @@
 # http://duriansoftware.com/joe/An-intro-to-modern-OpenGL.-Chapter-1:-The-Graphics-Pipeline.html
 
 from OpenGL.GL import *
-from OpenGL.GL.ARB.framebuffer_object import *
 import pygame, pygame.image, pygame.key
 from pygame.locals import *
-import numpy
-import sys
 from opengl_tools import *
-
-def render(resources, position, zoom, screen_dimensions):
-    screen_w, screen_h = screen_dimensions
-    glViewport(0,0,screen_w,screen_h)
-    glClearColor(0.4, 0.4, 0.4, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT)
-
-    glUseProgram(resources.program.program)
-    glUniform2f(resources.program.uniforms['screen_dimensions'], screen_w, screen_h)
-    glUniform2f(resources.program.uniforms['cam_position'], position[0], position[1])
-    glUniform1f(resources.program.uniforms['zoom'], zoom)
-    glUniform1f(resources.program.uniforms['texture_dimension'], 512.0) 
-
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, resources.map_texture)
-    glUniform1i(resources.program.uniforms['map_texture'], 0)
-
-    glActiveTexture(GL_TEXTURE1)
-    glBindTexture(GL_TEXTURE_2D, resources.texture_atlas)
-    glUniform1i(resources.program.uniforms['texture_atlas'], 1)
-
-    glBindBuffer(GL_ARRAY_BUFFER, resources.vertex_buffer)
-    glVertexAttribPointer(
-        resources.program.attributes['position'],
-        4, # size
-        GL_FLOAT, # type
-        GL_FALSE, # normalized?
-        ctypes.sizeof(GLfloat)*4, # stride
-        None # offset
-        )
-    glEnableVertexAttribArray(resources.program.attributes['position'])
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, resources.element_buffer)
-    glDrawElements(
-        GL_TRIANGLE_STRIP,
-        4,
-        GL_UNSIGNED_SHORT,
-        None)
-    glDisableVertexAttribArray(resources.program.attributes['position'])
-    pygame.display.flip()
-
 
 vertex_shader='''\
 #version 130
@@ -70,7 +28,15 @@ out vec2 texcoord;
 
 void main()
 {
-    gl_Position.xy = ((position.xy / 2.0 + 0.5) * texture_dimension - cam_position) * 2.0 * zoom / screen_dimensions;
+    gl_Position.xy =
+        (
+            (position.xy / 2.0 + 0.5)
+            * texture_dimension
+            - cam_position
+        )
+        * 2.0
+        * zoom
+        / screen_dimensions;
     gl_Position.zw = vec2(0.0, 1.0);
     texcoord = position.xy;
 }
@@ -113,8 +79,10 @@ def make_resources():
         GL_ELEMENT_ARRAY_BUFFER,
         element_buffer_data,
         element_buffer_data.nbytes)
-    resources.map_texture = make_texture(image=minecraft_map, interpolate=False, alpha=True)
-    resources.texture_atlas = make_texture(image=atlas, interpolate=False, alpha=True)
+    resources.map_texture = make_texture(
+        image=minecraft_map, interpolate=False, alpha=True)
+    resources.texture_atlas = make_texture(
+        image=atlas, interpolate=False, alpha=True)
     resources.program = assemble_shader_program(
         vertex_shader,
         fragment_shader,
@@ -129,11 +97,53 @@ def make_resources():
             'position'])
     return resources
 
+def render(resources, position, zoom, screen_dimensions):
+    screen_w, screen_h = screen_dimensions
+    glViewport(0,0,screen_w,screen_h)
+    glClearColor(0.4, 0.4, 0.4, 1.0)
+    glClear(GL_COLOR_BUFFER_BIT)
+
+    glUseProgram(resources.program.program)
+    uniforms = resources.program.uniforms
+    glUniform2f(uniforms['screen_dimensions'], screen_w, screen_h)
+    glUniform2f(uniforms['cam_position'], position[0], position[1])
+    glUniform1f(uniforms['zoom'], zoom)
+    glUniform1f(uniforms['texture_dimension'], 512.0) 
+
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, resources.map_texture)
+    glUniform1i(resources.program.uniforms['map_texture'], 0)
+
+    glActiveTexture(GL_TEXTURE1)
+    glBindTexture(GL_TEXTURE_2D, resources.texture_atlas)
+    glUniform1i(resources.program.uniforms['texture_atlas'], 1)
+
+    glBindBuffer(GL_ARRAY_BUFFER, resources.vertex_buffer)
+    glVertexAttribPointer(
+        resources.program.attributes['position'],
+        4, # size
+        GL_FLOAT, # type
+        GL_FALSE, # normalized?
+        ctypes.sizeof(GLfloat)*4, # stride
+        None # offset
+        )
+    position_attribute = resources.program.attributes['position']
+    glEnableVertexAttribArray(position_attribute)
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, resources.element_buffer)
+    glDrawElements(
+        GL_TRIANGLE_STRIP,
+        4,
+        GL_UNSIGNED_SHORT,
+        None)
+    glDisableVertexAttribArray(position_attribute)
+    pygame.display.flip()
+
 def main(): 
     video_flags = OPENGL|DOUBLEBUF
     pygame.init()
     screen_dimensions = 800, 600
-    surface = pygame.display.set_mode(screen_dimensions, video_flags)
+    surface = pygame.display.set_mode(
+        screen_dimensions, video_flags)
     resources = make_resources()
     frames = 0
     done = 0

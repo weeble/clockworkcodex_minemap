@@ -4,7 +4,6 @@
 # Licensed under the MIT license: http://www.opensource.org/licenses/MIT
 
 from OpenGL.GL import *
-from OpenGL.GL.ARB.framebuffer_object import *
 import pygame, pygame.image, pygame.key
 import numpy
 import sys
