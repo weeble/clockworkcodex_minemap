@@ -43,7 +43,7 @@ def float_array(*args):
 def short_array(*args):
     return numpy.array(args, dtype=GLshort)
 
-def make_texture(filename=None, image=None, interpolate=True, alpha=False):
+def make_texture(filename=None, image=None, interpolate=True, alpha=False, integer=False, maxlod=None):
     if image == None:
         image = pygame.image.load(filename)
     pixels = pygame.image.tostring(image, "RGBA" if alpha else "RGB", True)
@@ -53,16 +53,36 @@ def make_texture(filename=None, image=None, interpolate=True, alpha=False):
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE)
+    if maxlod is not None:
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, maxlod)
+    if alpha:
+        if integer:
+            targetformat = GL_RGBA8UI
+            sourceformat = GL_RGBA_INTEGER
+        else:
+            targetformat = GL_RGBA8
+            sourceformat = GL_RGBA
+    else:
+        if integer:
+            targetformat = GL_RGB8UI
+            sourceformat = GL_RGB_INTEGER
+        else:
+            targetformat = GL_RGB8
+            sourceformat = GL_RGB
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
-        GL_RGBA8 if alpha else GL_RGB8,
+        targetformat,
         image.get_width(),
         image.get_height(),
         0,
-        GL_RGBA if alpha else GL_RGB,
+        sourceformat, #GL_RGBA if alpha else GL_RGB,
         GL_UNSIGNED_BYTE,
         pixels)
+    #retval = ctypes.c_int()
+    print glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_INTERNAL_FORMAT) #,retval)
+    #print retval
+    #sys.exit()
     return texture
 
 def make_shader(type, source):

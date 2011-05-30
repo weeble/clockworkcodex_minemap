@@ -38,7 +38,7 @@ void main()
         * zoom
         / screen_dimensions;
     gl_Position.zw = vec2(0.0, 1.0);
-    texcoord = position.xy;
+    texcoord = position.xy * 0.5 + 0.5;
 }
 '''
 
@@ -46,14 +46,14 @@ fragment_shader = '''\
 #version 130
 
 uniform sampler2D texture_atlas;
-uniform sampler2D map_texture;
+uniform usampler2D map_texture;
 
 in vec2 texcoord;
 out vec4 fragcolor;
 
 void main()
 {
-    fragcolor = texture2D(texture_atlas, texcoord * 0.5 + 0.5);
+    fragcolor = texture2D(texture_atlas, texcoord);
 }
 '''
 
@@ -80,7 +80,8 @@ def make_resources():
         element_buffer_data,
         element_buffer_data.nbytes)
     resources.map_texture = make_texture(
-        image=minecraft_map, interpolate=False, alpha=True)
+        image=minecraft_map, interpolate=False,
+        alpha=True, integer=True)
     resources.texture_atlas = make_texture(
         image=atlas, interpolate=False, alpha=True)
     resources.program = assemble_shader_program(

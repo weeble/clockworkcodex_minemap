@@ -45,6 +45,9 @@ void main()
 fragment_shader = '''\
 #version 130
 
+const float TILE_COUNT = 512.0;
+const float INV_TILE_COUNT = 1.0 / TILE_COUNT;
+
 uniform sampler2D texture_atlas;
 uniform usampler2D map_texture;
 
@@ -53,7 +56,17 @@ out vec4 fragcolor;
 
 void main()
 {
-    fragcolor = texture2D(texture_atlas, texcoord);
+    vec2 theta;
+
+    
+    theta = (mod(texcoord, INV_TILE_COUNT) * TILE_COUNT); //*2.0 - 1.0;
+    uvec4 map_sample = texture(map_texture, texcoord);
+    uint uphi = map_sample.x % 16u;
+    uint vphi = 15u - (map_sample.x / 16u);
+    vec2 phi = vec2(uphi, vphi);
+    vec2 atlas_point = phi / 16.0 + theta / 16.0;
+
+    fragcolor = texture2D(texture_atlas, atlas_point);
 }
 '''
 
@@ -61,7 +74,7 @@ class Resources(object):
     pass
 
 def make_resources():
-    minecraft_map = pygame.Surface((512,512))
+    minecraft_map = pygame.image.load('numbered_texture_atlas.png')
     atlas = pygame.image.load('numbered_texture_atlas.png')
     vertex_buffer_data = float_array(
         -1.0, -1.0, 0.0, 1.0,
@@ -80,10 +93,9 @@ def make_resources():
         element_buffer_data,
         element_buffer_data.nbytes)
     resources.map_texture = make_texture(
-        image=minecraft_map, interpolate=False,
-        alpha=True, integer=True)
+        image=minecraft_map, interpolate=False, alpha=True, integer=True)
     resources.texture_atlas = make_texture(
-        image=atlas, interpolate=False, alpha=True)
+        image=atlas, interpolate=True, alpha=True, maxlod=4.0)
     resources.program = assemble_shader_program(
         vertex_shader,
         fragment_shader,
@@ -109,7 +121,7 @@ def render(resources, position, zoom, screen_dimensions):
     glUniform2f(uniforms['screen_dimensions'], screen_w, screen_h)
     glUniform2f(uniforms['cam_position'], position[0], position[1])
     glUniform1f(uniforms['zoom'], zoom)
-    glUniform1f(uniforms['texture_dimension'], 512.0) 
+    glUniform1f(uniforms['texture_dimension'], 8192) 
 
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, resources.map_texture)
@@ -149,7 +161,7 @@ def main():
     frames = 0
     done = 0
     zoom = 1.0
-    position = [256.0, 256.0]
+    position = [256, 8192 - 256] #//256.0, 256.0]
     dragging = False
     draglast = 0,0
 

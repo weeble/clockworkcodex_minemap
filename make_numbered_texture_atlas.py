@@ -8,7 +8,7 @@ def make_numbered_texture_atlas():
         x = i % 16
         fg = (255,255,255) if i<=127 else (0,0,0)
         bg = (i,i,i)
-        textimage = font.render(str(y*16+x), True, fg)
+        textimage = font.render(str(i), True, fg)
         w,h = textimage.get_size()
         surface.fill(bg, (32*x, 32*y, 32, 32))
         surface.blit(textimage, (32*x+16-w//2, 32*y+16-h//2))
