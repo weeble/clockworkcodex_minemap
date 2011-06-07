@@ -68,7 +68,7 @@ void main()
     vec2 phi = vec2(uphi, vphi);
     vec2 atlas_point = phi / 16.0 + theta / 16.0;
 
-    fragcolor = textureGrad(texture_atlas, atlas_point, vec2(1/512.0,0/zoom), vec2(0,1/512.0/zoom));
+    fragcolor = textureGrad(texture_atlas, atlas_point, vec2(1/512.0/zoom,0), vec2(0,1/512.0/zoom));
 }
 '''
 
