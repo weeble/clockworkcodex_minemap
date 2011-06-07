@@ -49,8 +49,8 @@ def make_texture(filename=None, image=None, interpolate=True, alpha=False, integ
     pixels = pygame.image.tostring(image, "RGBA" if alpha else "RGB", True)
     texture=glGenTextures(1)
     glBindTexture(GL_TEXTURE_2D, texture)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR if interpolate else GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST if interpolate else GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE)
     if maxlod is not None:
@@ -69,6 +69,7 @@ def make_texture(filename=None, image=None, interpolate=True, alpha=False, integ
         else:
             targetformat = GL_RGB8
             sourceformat = GL_RGB
+    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
@@ -79,6 +80,7 @@ def make_texture(filename=None, image=None, interpolate=True, alpha=False, integ
         sourceformat, #GL_RGBA if alpha else GL_RGB,
         GL_UNSIGNED_BYTE,
         pixels)
+
     #retval = ctypes.c_int()
     print glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_INTERNAL_FORMAT) #,retval)
     #print retval
