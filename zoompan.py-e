@@ -9,13 +9,13 @@
 # With great thanks to Joe Groff:
 # http://duriansoftware.com/joe/An-intro-to-modern-OpenGL.-Chapter-1:-The-Graphics-Pipeline.html
 
-from OpenGL.GL import *
+from OpenGL import GL
 import pygame, pygame.image, pygame.key
 from pygame.locals import *
 from opengl_tools import *
 import math
 
-vertex_shader='''\
+vertex_shader = '''\
 #version 130
 
 uniform vec2 screen_dimensions;
@@ -87,11 +87,11 @@ def make_resources():
         0,1,2,3)
     resources = Resources()
     resources.vertex_buffer = make_buffer(
-        GL_ARRAY_BUFFER,
+        GL.GL_ARRAY_BUFFER,
         vertex_buffer_data,
         vertex_buffer_data.nbytes)
     resources.element_buffer = make_buffer(
-        GL_ELEMENT_ARRAY_BUFFER,
+        GL.GL_ELEMENT_ARRAY_BUFFER,
         element_buffer_data,
         element_buffer_data.nbytes)
     resources.map_texture = make_texture(
@@ -114,43 +114,43 @@ def make_resources():
 
 def render(resources, position, zoom, screen_dimensions):
     screen_w, screen_h = screen_dimensions
-    glViewport(0,0,screen_w,screen_h)
-    glClearColor(0.4, 0.4, 0.4, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT)
+    GL.glViewport(0,0,screen_w,screen_h)
+    GL.glClearColor(0.4, 0.4, 0.4, 1.0)
+    GL.glClear(GL.GL_COLOR_BUFFER_BIT)
 
-    glUseProgram(resources.program.program)
+    GL.glUseProgram(resources.program.program)
     uniforms = resources.program.uniforms
-    glUniform2f(uniforms['screen_dimensions'], screen_w, screen_h)
-    glUniform2f(uniforms['cam_position'], position[0], position[1])
-    glUniform1f(uniforms['zoom'], zoom)
-    glUniform1f(uniforms['texture_dimension'], 8192) 
+    GL.glUniform2f(uniforms['screen_dimensions'], screen_w, screen_h)
+    GL.glUniform2f(uniforms['cam_position'], position[0], position[1])
+    GL.glUniform1f(uniforms['zoom'], zoom)
+    GL.glUniform1f(uniforms['texture_dimension'], 8192) 
 
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, resources.map_texture)
-    glUniform1i(resources.program.uniforms['map_texture'], 0)
+    GL.glActiveTexture(GL.GL_TEXTURE0)
+    GL.glBindTexture(GL.GL_TEXTURE_2D, resources.map_texture)
+    GL.glUniform1i(resources.program.uniforms['map_texture'], 0)
 
-    glActiveTexture(GL_TEXTURE1)
-    glBindTexture(GL_TEXTURE_2D, resources.texture_atlas)
-    glUniform1i(resources.program.uniforms['texture_atlas'], 1)
+    GL.glActiveTexture(GL.GL_TEXTURE1)
+    GL.glBindTexture(GL.GL_TEXTURE_2D, resources.texture_atlas)
+    GL.glUniform1i(resources.program.uniforms['texture_atlas'], 1)
 
-    glBindBuffer(GL_ARRAY_BUFFER, resources.vertex_buffer)
-    glVertexAttribPointer(
+    GL.glBindBuffer(GL.GL_ARRAY_BUFFER, resources.vertex_buffer)
+    GL.glVertexAttribPointer(
         resources.program.attributes['position'],
         4, # size
-        GL_FLOAT, # type
-        GL_FALSE, # normalized?
+        GL.GL_FLOAT, # type
+        GL.GL_FALSE, # normalized?
         ctypes.sizeof(GLfloat)*4, # stride
         None # offset
         )
     position_attribute = resources.program.attributes['position']
-    glEnableVertexAttribArray(position_attribute)
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, resources.element_buffer)
-    glDrawElements(
-        GL_TRIANGLE_STRIP,
+    GL.glEnableVertexAttribArray(position_attribute)
+    GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, resources.element_buffer)
+    GL.glDrawElements(
+        GL.GL_TRIANGLE_STRIP,
         4,
-        GL_UNSIGNED_SHORT,
+        GL.GL_UNSIGNED_SHORT,
         None)
-    glDisableVertexAttribArray(position_attribute)
+    GL.glDisableVertexAttribArray(position_attribute)
     pygame.display.flip()
 
 def main(): 
