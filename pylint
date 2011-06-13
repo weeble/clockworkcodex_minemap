@@ -1,0 +1,3 @@
+#!/bin/sh
+PYLINT_OPTS="-rn --disable-msg-cat IRC"
+pylint ${PYLINT_OPTS} $@
