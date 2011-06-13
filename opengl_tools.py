@@ -3,14 +3,71 @@
 # Copyright 2011, Annette Wilson
 # Licensed under the MIT license: http://www.opensource.org/licenses/MIT
 
-from OpenGL.GL import *
-import pygame, pygame.image, pygame.key
+from OpenGL.GL import (
+    GL_TEXTURE_2D,
+    GL_TEXTURE_MIN_FILTER,
+    GL_TEXTURE_MAG_FILTER,
+    GL_NEAREST_MIPMAP_NEAREST,
+    GL_NEAREST,
+    GL_TEXTURE_WRAP_S,
+    GL_TEXTURE_WRAP_T,
+    GL_CLAMP_TO_EDGE,
+    GL_TEXTURE_MAX_LOD,
+    GL_RGBA8UI,
+    GL_RGBA_INTEGER,
+    GL_RGBA8,
+    GL_RGBA,
+    GL_RGB8UI,
+    GL_RGB_INTEGER,
+    GL_RGB8,
+    GL_RGB,
+    GL_GENERATE_MIPMAP,
+    GL_TRUE,
+    GL_UNSIGNED_BYTE,
+    GL_TEXTURE_INTERNAL_FORMAT,
+    GL_UNSIGNED_INT,
+    GL_COMPILE_STATUS,
+    GL_LINK_STATUS,
+    GL_VERTEX_SHADER,
+    GL_FRAGMENT_SHADER,
+    GL_STATIC_DRAW,
+    GLfloat,
+    GLshort,
+    glGetUniformLocation,
+    glGetAttribLocation,
+    glGenBuffers,
+    glBindBuffer,
+    glBufferData,
+    glGenTextures,
+    glBindTexture,
+    glTexParameteri,
+    glTexParameterf,
+    glTexImage2D,
+    glGetTexLevelParameteriv,
+    glCreateShader,
+    glShaderSource,
+    glCompileShader,
+    glGetShaderiv,
+    glCreateProgram,
+    glAttachShader,
+    glLinkProgram,
+    glGetProgramiv,
+    glDeleteShader,
+    glGetShaderInfoLog,
+    glDeleteShader,
+    glGetProgramInfoLog,
+    glDeleteProgram)
+import ctypes
+import pygame
+import pygame.image
+import pygame.key
 import numpy
 import sys
 from collections import namedtuple
 
-class ShaderProgram(namedtuple("ShaderProgramBase", "program uniforms attributes")):
-    pass
+
+ShaderProgram = namedtuple("ShaderProgram", "program uniforms attributes")
+
 
 def assemble_shader_program(
         vertex_shader_source,
@@ -22,34 +79,48 @@ def assemble_shader_program(
     program = make_program(vertex_shader, fragment_shader)
     return ShaderProgram(
         program,
-        get_uniforms(program, *uniform_names),
-        get_attributes(program, *attribute_names))
+        get_uniforms(program, uniform_names),
+        get_attributes(program, attribute_names))
 
-def get_uniforms(program, *names):
+
+def get_uniforms(program, names):
     return dict((name, glGetUniformLocation(program, name)) for name in names)
 
-def get_attributes(program, *names):
+
+def get_attributes(program, names):
     return dict((name, glGetAttribLocation(program, name)) for name in names)
 
+
 def make_buffer(target, buffer_data, size):
-    buffer = glGenBuffers(1)
-    glBindBuffer(target, buffer)
+    buf = glGenBuffers(1)
+    glBindBuffer(target, buf)
     glBufferData(target, size, buffer_data, GL_STATIC_DRAW)
-    return buffer
+    return buf
+
 
 def float_array(*args):
     return numpy.array(args, dtype=GLfloat)
 
+
 def short_array(*args):
     return numpy.array(args, dtype=GLshort)
 
-def make_texture(filename=None, image=None, interpolate=True, alpha=False, integer=False, maxlod=None):
+
+def make_texture(
+        filename=None,
+        image=None,
+        interpolate=True,
+        alpha=False,
+        integer=False,
+        maxlod=None):
     if image == None:
         image = pygame.image.load(filename)
     pixels = pygame.image.tostring(image, "RGBA" if alpha else "RGB", True)
-    texture=glGenTextures(1)
+    texture = glGenTextures(1)
     glBindTexture(GL_TEXTURE_2D, texture)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST if interpolate else GL_NEAREST)
+    glTexParameteri(
+        GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+        GL_NEAREST_MIPMAP_NEAREST if interpolate else GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE)
@@ -69,7 +140,7 @@ def make_texture(filename=None, image=None, interpolate=True, alpha=False, integ
         else:
             targetformat = GL_RGB8
             sourceformat = GL_RGB
-    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+    glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE)
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
@@ -77,18 +148,19 @@ def make_texture(filename=None, image=None, interpolate=True, alpha=False, integ
         image.get_width(),
         image.get_height(),
         0,
-        sourceformat, #GL_RGBA if alpha else GL_RGB,
+        sourceformat,
         GL_UNSIGNED_BYTE,
         pixels)
 
-    #retval = ctypes.c_int()
-    print glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_INTERNAL_FORMAT) #,retval)
-    #print retval
-    #sys.exit()
+    print glGetTexLevelParameteriv(
+            GL_TEXTURE_2D,
+            0,
+            GL_TEXTURE_INTERNAL_FORMAT)
     return texture
 
-def make_shader(type, source):
-    shader = glCreateShader(type)
+
+def make_shader(shadertype, source):
+    shader = glCreateShader(shadertype)
     glShaderSource(shader, source)
     glCompileShader(shader)
     retval = ctypes.c_uint(GL_UNSIGNED_INT)
@@ -99,6 +171,7 @@ def make_shader(type, source):
         glDeleteShader(shader)
         raise Exception("Failed to compile shader.")
     return shader
+
 
 def make_program(vertex_shader, fragment_shader):
     program = glCreateProgram()
