@@ -176,7 +176,9 @@ class VolumeFactory(object):
     def load_chunk(self, nbtfile, volume=None):
         if volume is not None:
             if volume.dimensions != (16,16,128):
-                raise TypeError("load_chunk requires a volume that is 16x16x128")
+                raise TypeError(
+                    "load_chunk requires a volume "+
+                    "that is 16x16x128")
         if nbtfile is None:
             if volume is None:
                 return self.empty_volume((16,16,128))
@@ -188,10 +190,14 @@ class VolumeFactory(object):
         if volume is None:
             volume = self.empty_volume((16,16,128))
         level = nbtfile['Level']
-        volume.blocks[:,:,:] = arrange_8bit(level['Blocks'].value)
-        volume.skylight[:,:,:] = arrange_4bit(level['SkyLight'].value)
-        volume.blocklight[:,:,:] = arrange_4bit(level['BlockLight'].value)
-        volume.data[:,:,:] = arrange_4bit(level['Data'].value)
+        blocks = arrange_8bit(level['Blocks'].value)
+        skylight = arrange_4bit(level['SkyLight'].value)
+        blocklight = arrange_4bit(level['BlockLight'].value)
+        data = arrange_4bit(level['Data'].value)
+        volume.blocks[:, :, :] =  blocks
+        volume.skylight[:, :, :] = skylight
+        volume.blocklight[:, :, :] = blocklight
+        volume.data[:, :, :] = data
         return volume
     def load_region(self, fname):
         f = open(fname, "rb")
