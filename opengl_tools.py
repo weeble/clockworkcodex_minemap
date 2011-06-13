@@ -186,3 +186,23 @@ def make_program(vertex_shader, fragment_shader):
         glDeleteProgram(program)
         raise Exception("Failed to link shader program.")
     return program
+
+
+# pygame.surfarray.make_surface is broken in 1.9.1. It reads uninitialized
+# stack contents on 64-bit systems. :( Here we use numpy to do the copying
+# instead.
+def make_surface(array):
+    w,h,depth = array.shape
+    if depth == 4:
+        surf = pygame.Surface((w,h), depth=32, flags=pygame.SRCALPHA)
+        pixels = pygame.surfarray.pixels3d(surf)
+        pixels[:,:,:] = array[:,:,:3]
+        alpha = pygame.surfarray.pixels_alpha(surf)
+        alpha[:,:] = array[:,:,3]
+    elif depth == 3:
+        surf = pygame.Surface((w,h), depth=32)
+        pixels = pygame.surfarray.pixels3d(surf)
+        pixels[:,:,:depth] = array
+    else:
+        raise ValueError("Array must have minor dimension of 3 or 4.")
+    return surf
