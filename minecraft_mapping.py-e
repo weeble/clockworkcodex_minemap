@@ -122,11 +122,11 @@ all_tileinfo = [
     TileInfo(95, "locked chest",   False, (9,1,0)),
     ]
 
-tileid_advanced_mapping_array = numpy.zeros((256,16,2), dtype="u1")
+tileid_to_tex_code = numpy.zeros((256,16,2), dtype="u1")
 tileid_is_transparent = numpy.zeros((256,), dtype="bool")
 
 for tileinfo in all_tileinfo:
-    tileid_advanced_mapping_array[tileinfo.blockid] = [(x + 16 * (15 - y), r) for (x,y,r) in tileinfo.texture_frames]
+    tileid_to_tex_code[tileinfo.blockid] = [(x + 16 * y, r) for (x,y,r) in tileinfo.texture_frames]
     tileid_is_transparent[tileinfo.blockid] = tileinfo.transparent
 
 
@@ -211,10 +211,13 @@ class VolumeFactory(object):
         return region
 
 
-class Volume(object):
+class CellArray(object):
+    '''
+    Any array of Minecraft blocks.
+    Could be 2D or 3D.
+    '''
     def __init__(self, data):
-        self._data = data
-        self.height = self.dimensions[2]
+        self._data=data
     @property
     def dimensions(self):
         return self._data.shape
@@ -236,3 +239,94 @@ class Volume(object):
     def __setitem__(self, index, value):
         self._data[index] = value._data
 
+
+class Layer(CellArray):
+    '''
+    A 2D array of Minecraft blocks.
+    '''
+    def get_texture_codes(self, mask=None):
+        if mask is None:
+            return tileid_to_tex_code[self.blocks, self.data, 0]
+        masked_blocks = numpy.choose(
+                mask,
+                [
+                    numpy.zeros(self.dimensions, dtype='u1'),
+                    self.blocks
+                ])
+        return tileid_to_tex_code[masked_blocks, self.data, 0]
+    def get_orientations(self):
+        return tileid_to_tex_code[self.blocks, self.data, 1]
+    def render(self, renderdatafactory=None):
+        if renderdatafactory is None:
+            renderdatafactory = LayerRenderDataFactory()
+        renderdata
+
+class LayerRenderData(object):
+    '''
+    A 2D array of data that can be fed to our pixel shader to tell
+    it what appears in our map.
+    '''
+    def __init__(self, data):
+        self._data=data
+    @property
+    def dimensions(self):
+        return self._data.shape
+    @property
+    def texture_code(self):
+        return self._data['texture_code']
+    @property
+    def brightness(self):
+        return self._data['brightness']
+    @property
+    def orientation(self):
+        return self._data['orientation']
+    @property
+    def altitude(self):
+        return self._data['altitude']
+    def __getitem__(self, index):
+        data = self._data[index]
+        return LayerRenderData(data)
+    def __setitem__(self, index, value):
+        self._data[index] = value._data
+
+
+class LayerRenderDataFactory(object):
+    def empty_render_data(self, dimensions):
+        data = numpy.zeros(
+            dimensions,
+            dtype = [
+                ('texture_code', 'u1'),
+                ('brightness', 'u1'),
+                ('orientation', 'u1'),
+                ('altitude', 'u1')])
+        return LayerRenderData(data)
+
+
+class Volume(CellArray):
+    @property
+    def height(self):
+        return self.dimensions[2]
+    def heightmap_slice(self, heightmap):
+        '''
+        Select blocks from this volume using a heightmap,
+        resulting in a 2D layer of blocks.
+        '''
+        # For solid blocks, use the lighting data of the cell above.
+        this_layer = get_cells_using_heightmap(self._data, heightmap)
+        above_layer = get_cells_using_heightmap(self._data, numpy.clip(heightmap + 1, 0, self.height-1))
+        is_transparent = tileid_is_transparent[this_layer['blocks']]
+        result = this_layer.copy()
+        result['skylight'] = numpy.choose(is_transparent, [above_layer['skylight'], this_layer['skylight']])
+        result['blocklight'] = numpy.choose(is_transparent, [above_layer['blocklight'], this_layer['blocklight']])
+        return Layer(result)
+
+
+def get_cells_using_heightmap(source, heightmap):
+    '''
+    Given a 3D array, and a 2D heightmap, select cells from the
+    3D array using indices from the 2D heightmap.
+    '''
+    idx = [numpy.arange(dimension) for dimension in source.shape]
+    idx = list(numpy.ix_(*idx))
+    idx[2] = numpy.expand_dims(heightmap, 2)
+    return numpy.squeeze(source[idx])
